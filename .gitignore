@@ -1,0 +1,43 @@
+# Go binaries and test artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+frontend/package.json.md5
+frontend/wailsjs/
+
+# Wails build output
+build/*
+!build/appicon.png
+!build/windows/
+build/windows/*
+!build/windows/icon.ico
+!build/windows/info.json
+!build/windows/wails.exe.manifest
+build/bin/extracted-icon.png
+
+# Local runtime data
+tmp/
+*.db
+*.db-shm
+*.db-wal
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Temporary or backup files
+*.orig
+*.rej
+*.tmp
+*.bak
+*.go.[0-9]*
