@@ -1,9 +1,20 @@
+export interface TodoSubitem {
+  id: string;
+  todoId: string;
+  content: string;
+  isCompleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Todo {
   id: string;
   title: string;
   summary: string;
   detailMarkdown: string;
   isCompleted: boolean;
+  dueDate: string;
+  subitems: TodoSubitem[];
   createdAt: string;
   updatedAt: string;
 }
@@ -24,4 +35,6 @@ export interface TodoDraft {
   summary: string;
   detailMarkdown: string;
   isCompleted: boolean;
+  dueDate: string;
+  subitems: TodoSubitem[];
 }

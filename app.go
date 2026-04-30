@@ -62,6 +62,7 @@ func (a *App) ListTodos() ([]store.Todo, error) {
 
 func (a *App) CreateTodo(input store.CreateTodoInput) (*store.Todo, error) {
 	input.Title = strings.TrimSpace(input.Title)
+	input.DueDate = strings.TrimSpace(input.DueDate)
 	if input.Title == "" {
 		return nil, errors.New("title is required")
 	}
@@ -72,6 +73,7 @@ func (a *App) UpdateTodo(input store.UpdateTodoInput) (*store.Todo, error) {
 	if strings.TrimSpace(input.ID) == "" {
 		return nil, errors.New("todo id is required")
 	}
+	input.DueDate = strings.TrimSpace(input.DueDate)
 	if strings.TrimSpace(input.Title) == "" {
 		return nil, errors.New("title is required")
 	}
@@ -90,6 +92,57 @@ func (a *App) ToggleTodoCompleted(id string) (*store.Todo, error) {
 		return nil, errors.New("todo id is required")
 	}
 	return a.storeManager.ToggleTodoCompleted(id)
+}
+
+func (a *App) CreateTodoSubitem(input store.CreateTodoSubitemInput) (*store.Todo, error) {
+	input.TodoID = strings.TrimSpace(input.TodoID)
+	input.Content = strings.TrimSpace(input.Content)
+	if input.TodoID == "" {
+		return nil, errors.New("todo id is required")
+	}
+	if input.Content == "" {
+		return nil, errors.New("subitem content is required")
+	}
+	return a.storeManager.CreateTodoSubitem(input)
+}
+
+func (a *App) DeleteTodoSubitems(input store.DeleteTodoSubitemsInput) (*store.Todo, error) {
+	input.TodoID = strings.TrimSpace(input.TodoID)
+	if input.TodoID == "" {
+		return nil, errors.New("todo id is required")
+	}
+	if len(input.IDs) == 0 {
+		return nil, errors.New("at least one subitem id is required")
+	}
+	return a.storeManager.DeleteTodoSubitems(input)
+}
+
+func (a *App) ToggleTodoSubitemCompleted(input store.ToggleTodoSubitemInput) (*store.Todo, error) {
+	input.TodoID = strings.TrimSpace(input.TodoID)
+	input.ID = strings.TrimSpace(input.ID)
+	if input.TodoID == "" {
+		return nil, errors.New("todo id is required")
+	}
+	if input.ID == "" {
+		return nil, errors.New("subitem id is required")
+	}
+	return a.storeManager.ToggleTodoSubitemCompleted(input)
+}
+
+func (a *App) UpdateTodoSubitem(input store.UpdateTodoSubitemInput) (*store.Todo, error) {
+	input.TodoID = strings.TrimSpace(input.TodoID)
+	input.ID = strings.TrimSpace(input.ID)
+	input.Content = strings.TrimSpace(input.Content)
+	if input.TodoID == "" {
+		return nil, errors.New("todo id is required")
+	}
+	if input.ID == "" {
+		return nil, errors.New("subitem id is required")
+	}
+	if input.Content == "" {
+		return nil, errors.New("subitem content is required")
+	}
+	return a.storeManager.UpdateTodoSubitem(input)
 }
 
 func (a *App) UpdateStorageDirectory(path string, copyData bool) (*BootstrapResponse, error) {
