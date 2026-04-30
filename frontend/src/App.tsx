@@ -7,7 +7,7 @@ import type { AppConfig, BootstrapResponse, Todo, TodoDraft } from './types';
 const APP_INFO = {
   name: 'Mine ToDo',
   version: '1.0.0',
-  releaseDate: '2026-04-29',
+  releaseDate: '2026-04-30',
 };
 
 type Locale = 'zh-CN' | 'en-US';
@@ -30,6 +30,9 @@ const messages = {
     exitEdit: '退出编辑',
     edit: '编辑',
     delete: '删除',
+    confirmDeleteTitle: '确认删除',
+    confirmDeleteDescription: '删除后将无法恢复',
+    confirmDeleteAction: '确认删除',
     titlePlaceholder: '标题',
     summaryPlaceholder: '添加备注',
     markdown: 'Markdown',
@@ -96,6 +99,9 @@ const messages = {
     exitEdit: 'Done',
     edit: 'Edit',
     delete: 'Delete',
+    confirmDeleteTitle: 'Confirm Delete',
+    confirmDeleteDescription: 'This todo cannot be restored after deletion.',
+    confirmDeleteAction: 'Delete Todo',
     titlePlaceholder: 'Title',
     summaryPlaceholder: 'Add a note',
     markdown: 'Markdown',
@@ -171,6 +177,7 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('data');
   const [isDirectoryConfirmOpen, setIsDirectoryConfirmOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [error, setError] = useState('');
   const autosaveTokenRef = useRef(0);
 
@@ -329,6 +336,7 @@ function App() {
       setSelectedId(next?.id ?? null);
       setDraft(next ? fromTodo(next) : emptyDraft());
       setIsEditing(false);
+      setIsDeleteConfirmOpen(false);
       setSaveStatus('saved');
       setError('');
     } catch (err) {
@@ -416,6 +424,13 @@ function App() {
     setIsSettingsOpen(true);
   }
 
+  function requestDeleteTodo() {
+    if (!selectedId) {
+      return;
+    }
+    setIsDeleteConfirmOpen(true);
+  }
+
   return (
     <>
       <div className="shell">
@@ -494,7 +509,7 @@ function App() {
                       {copy.edit}
                     </button>
                   )}
-                  <button type="button" className="topbar-link" onClick={() => void handleDeleteTodo()} disabled={saving}>
+                  <button type="button" className="topbar-link" onClick={requestDeleteTodo} disabled={saving}>
                     {copy.delete}
                   </button>
                 </div>
@@ -706,6 +721,35 @@ function App() {
                 </div>
               </div>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {isDeleteConfirmOpen ? (
+        <div className="modal-backdrop" onClick={() => setIsDeleteConfirmOpen(false)}>
+          <div className="settings-confirm-card delete-confirm-card" onClick={(event) => event.stopPropagation()}>
+            <div className="settings-pane__header">
+              <h3>{copy.confirmDeleteTitle}</h3>
+              <p>{copy.confirmDeleteDescription}</p>
+            </div>
+            <div className="settings-actions delete-confirm-actions">
+              <button
+                type="button"
+                className="dialog-button dialog-button--secondary"
+                onClick={() => setIsDeleteConfirmOpen(false)}
+                disabled={saving}
+              >
+                {copy.cancel}
+              </button>
+              <button
+                type="button"
+                className="dialog-button dialog-button--danger"
+                onClick={() => void handleDeleteTodo()}
+                disabled={saving}
+              >
+                {copy.confirmDeleteAction}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

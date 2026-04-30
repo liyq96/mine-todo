@@ -43,7 +43,6 @@
 │  │  └─ types.ts             # 前端类型定义
 │  └─ package.json
 ├─ docs
-│  ├─ architecture.md         # 架构说明
 │  └─ usage.md                # 使用说明
 ├─ build
 │  ├─ appicon.png             # 应用图标源文件

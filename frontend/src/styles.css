@@ -60,7 +60,7 @@ textarea {
 .sidebar {
   border-right: 1px solid var(--line);
   background: #f6f6f7;
-  padding: 14px 14px 12px;
+  padding: 16px 14px 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -73,18 +73,29 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: 32px;
 }
 
 .topbar-link {
   border: none;
   background: transparent;
   color: #6e6e73;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
   padding: 2px 4px;
 }
 
 .topbar-link:hover {
   color: #1d1d1f;
+}
+
+.topbar-link--danger {
+  color: var(--danger);
+}
+
+.topbar-link--danger:hover {
+  color: #d93025;
 }
 
 .sidebar__header,
@@ -104,8 +115,9 @@ textarea {
   gap: 10px;
   color: var(--text-faint);
   font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
   padding: 0 6px;
-  margin-top: 2px;
 }
 
 .quick-entry {
@@ -299,7 +311,7 @@ h3 {
 
 .detail-panel {
   background: #ffffff;
-  padding: 22px 28px 28px;
+  padding: 16px 28px 28px;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -324,6 +336,8 @@ h3 {
 .created-at {
   color: var(--text-faint);
   font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .detail-section {
@@ -444,20 +458,6 @@ h3 {
   color: var(--danger);
 }
 
-.primary-button {
-  padding: 8px 14px;
-  border-radius: 10px;
-  background: var(--accent);
-  color: #ffffff;
-}
-
-.secondary-button {
-  padding: 8px 14px;
-  border-radius: 10px;
-  background: #f3f4f6;
-  color: #3a3a3c;
-}
-
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -552,6 +552,33 @@ h3 {
   gap: 14px;
 }
 
+.delete-confirm-card {
+  width: min(440px, 100%);
+  padding: 24px;
+  gap: 18px;
+  transform: translateY(-132px);
+}
+
+.delete-confirm-actions {
+  padding-top: 6px;
+}
+
+.delete-confirm-card .settings-pane__header {
+  gap: 8px;
+}
+
+.delete-confirm-card .settings-pane__header h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.delete-confirm-card .settings-pane__header p {
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
 .settings-pane {
   padding: 16px;
   display: grid;
@@ -617,6 +644,41 @@ h3 {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.dialog-button {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  background: #ffffff;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.dialog-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.dialog-button--secondary {
+  color: #3a3a3c;
+  border-color: var(--line);
+  background: #f8f8f8;
+}
+
+.dialog-button--secondary:hover:not(:disabled) {
+  background: #f1f1f2;
+}
+
+.dialog-button--danger {
+  color: #ffffff;
+  background: var(--danger);
+}
+
+.dialog-button--danger:hover:not(:disabled) {
+  background: #e1372d;
 }
 
 .language-options {
