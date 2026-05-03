@@ -43,16 +43,28 @@ jobs:
       - name: Build universal macOS app
         run: wails build -clean -platform darwin/universal
 
+      - name: Resolve app bundle path
+        id: resolve-app
+        run: |
+          APP_PATH="$(find build/bin -maxdepth 1 -name '*.app' -print -quit)"
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found in build/bin"
+            ls -la build/bin || true
+            exit 1
+          fi
+          echo "Resolved app bundle: $APP_PATH"
+          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
+
       - name: Package app as zip
         run: |
           mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent "build/bin/mine-todo.app" "dist/mine-todo-macos.zip"
+          ditto -c -k --sequesterRsrc --keepParent "${{ steps.resolve-app.outputs.app_path }}" "dist/mine-todo-macos.zip"
 
       - name: Upload macOS app bundle
         uses: actions/upload-artifact@v4
         with:
           name: mine-todo-macos-app
-          path: build/bin/mine-todo.app
+          path: ${{ steps.resolve-app.outputs.app_path }}
           if-no-files-found: error
 
       - name: Upload macOS zip
