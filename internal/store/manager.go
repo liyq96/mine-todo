@@ -19,6 +19,7 @@ type Manager struct {
 
 type Todo struct {
 	ID             string    `json:"id"`
+	GroupID        string    `json:"groupId"`
 	Title          string    `json:"title"`
 	Summary        string    `json:"summary"`
 	DetailMarkdown string    `json:"detailMarkdown"`
@@ -27,6 +28,13 @@ type Todo struct {
 	Subitems       []Subitem `json:"subitems"`
 	CreatedAt      time.Time `json:"createdAt"`
 	UpdatedAt      time.Time `json:"updatedAt"`
+}
+
+type Group struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type Subitem struct {
@@ -39,6 +47,7 @@ type Subitem struct {
 }
 
 type CreateTodoInput struct {
+	GroupID         string `json:"groupId"`
 	Title          string `json:"title"`
 	Summary        string `json:"summary"`
 	DetailMarkdown string `json:"detailMarkdown"`
@@ -47,6 +56,7 @@ type CreateTodoInput struct {
 
 type UpdateTodoInput struct {
 	ID             string `json:"id"`
+	GroupID        string `json:"groupId"`
 	Title          string `json:"title"`
 	Summary        string `json:"summary"`
 	DetailMarkdown string `json:"detailMarkdown"`
@@ -73,6 +83,20 @@ type UpdateTodoSubitemInput struct {
 	TodoID  string `json:"todoId"`
 	ID      string `json:"id"`
 	Content string `json:"content"`
+}
+
+type CreateGroupInput struct {
+	Name string `json:"name"`
+}
+
+type UpdateGroupInput struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type DeleteGroupInput struct {
+	ID          string `json:"id"`
+	DeleteTodos bool   `json:"deleteTodos"`
 }
 
 func NewManager(cfg *config.AppConfig) (*Manager, error) {
@@ -108,7 +132,7 @@ func (m *Manager) Switch(cfg *config.AppConfig) error {
 
 func (m *Manager) ListTodos() ([]Todo, error) {
 	rows, err := m.db.Query(`
-		SELECT id, title, summary, detail_markdown, is_completed, due_date, created_at, updated_at
+		SELECT id, group_id, title, summary, detail_markdown, is_completed, due_date, created_at, updated_at
 		FROM todos
 		ORDER BY created_at DESC
 	`)
@@ -123,6 +147,7 @@ func (m *Manager) ListTodos() ([]Todo, error) {
 		var dueDate sql.NullString
 		if err := rows.Scan(
 			&todo.ID,
+			&todo.GroupID,
 			&todo.Title,
 			&todo.Summary,
 			&todo.DetailMarkdown,
@@ -143,16 +168,48 @@ func (m *Manager) ListTodos() ([]Todo, error) {
 	return todos, rows.Err()
 }
 
+func (m *Manager) ListGroups() ([]Group, error) {
+	rows, err := m.db.Query(`
+		SELECT id, name, created_at, updated_at
+		FROM todo_groups
+		ORDER BY created_at ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query groups: %w", err)
+	}
+	defer rows.Close()
+
+	groups := make([]Group, 0)
+	for rows.Next() {
+		var group Group
+		if err := rows.Scan(
+			&group.ID,
+			&group.Name,
+			&group.CreatedAt,
+			&group.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan group: %w", err)
+		}
+		groups = append(groups, group)
+	}
+
+	return groups, rows.Err()
+}
+
 func (m *Manager) CreateTodo(input CreateTodoInput) (*Todo, error) {
 	now := time.Now()
 	id := fmt.Sprintf("%d", now.UnixNano())
 	markdown := normalizeMarkdown(input.DetailMarkdown)
 	dueDate := normalizeDateString(input.DueDate)
+	groupID, err := m.resolveGroupID(input.GroupID)
+	if err != nil {
+		return nil, err
+	}
 
-	_, err := m.db.Exec(`
-		INSERT INTO todos (id, title, summary, detail_markdown, is_completed, due_date, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 0, ?, ?, ?)
-	`, id, input.Title, input.Summary, markdown, dueDate, now, now)
+	_, err = m.db.Exec(`
+		INSERT INTO todos (id, group_id, title, summary, detail_markdown, is_completed, due_date, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+	`, id, groupID, input.Title, input.Summary, markdown, dueDate, now, now)
 	if err != nil {
 		return nil, fmt.Errorf("insert todo: %w", err)
 	}
@@ -163,11 +220,15 @@ func (m *Manager) CreateTodo(input CreateTodoInput) (*Todo, error) {
 func (m *Manager) UpdateTodo(input UpdateTodoInput) (*Todo, error) {
 	markdown := normalizeMarkdown(input.DetailMarkdown)
 	dueDate := normalizeDateString(input.DueDate)
+	groupID, err := m.resolveGroupID(input.GroupID)
+	if err != nil {
+		return nil, err
+	}
 	result, err := m.db.Exec(`
 		UPDATE todos
-		SET title = ?, summary = ?, detail_markdown = ?, is_completed = ?, due_date = ?, updated_at = ?
+		SET group_id = ?, title = ?, summary = ?, detail_markdown = ?, is_completed = ?, due_date = ?, updated_at = ?
 		WHERE id = ?
-	`, input.Title, input.Summary, markdown, input.IsCompleted, dueDate, time.Now(), input.ID)
+	`, groupID, input.Title, input.Summary, markdown, input.IsCompleted, dueDate, time.Now(), input.ID)
 	if err != nil {
 		return nil, fmt.Errorf("update todo: %w", err)
 	}
@@ -181,6 +242,102 @@ func (m *Manager) UpdateTodo(input UpdateTodoInput) (*Todo, error) {
 	}
 
 	return m.findByID(input.ID)
+}
+
+func (m *Manager) CreateGroup(input CreateGroupInput) (*Group, error) {
+	now := time.Now()
+	id := fmt.Sprintf("group-%d", now.UnixNano())
+	result, err := m.db.Exec(`
+		INSERT INTO todo_groups (id, name, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+	`, id, input.Name, now, now)
+	if err != nil {
+		return nil, fmt.Errorf("insert group: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if rows == 0 {
+		return nil, errors.New("group not created")
+	}
+
+	return m.findGroupByID(id)
+}
+
+func (m *Manager) UpdateGroup(input UpdateGroupInput) (*Group, error) {
+	if input.ID == defaultGroupID {
+		return nil, errors.New("default group cannot be renamed")
+	}
+
+	result, err := m.db.Exec(`
+		UPDATE todo_groups
+		SET name = ?, updated_at = ?
+		WHERE id = ?
+	`, input.Name, time.Now(), input.ID)
+	if err != nil {
+		return nil, fmt.Errorf("update group: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if rows == 0 {
+		return nil, errors.New("group not found")
+	}
+
+	return m.findGroupByID(input.ID)
+}
+
+func (m *Manager) DeleteGroup(input DeleteGroupInput) error {
+	if input.ID == defaultGroupID {
+		return errors.New("default group cannot be deleted")
+	}
+
+	tx, err := m.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin delete group tx: %w", err)
+	}
+
+	if input.DeleteTodos {
+		if _, err := tx.Exec(`DELETE FROM todo_subitems WHERE todo_id IN (SELECT id FROM todos WHERE group_id = ?)`, input.ID); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("delete group subitems: %w", err)
+		}
+		if _, err := tx.Exec(`DELETE FROM todos WHERE group_id = ?`, input.ID); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("delete group todos: %w", err)
+		}
+	} else {
+		if _, err := tx.Exec(`UPDATE todos SET group_id = ?, updated_at = ? WHERE group_id = ?`, defaultGroupID, time.Now(), input.ID); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("reassign group todos: %w", err)
+		}
+	}
+
+	result, err := tx.Exec(`DELETE FROM todo_groups WHERE id = ?`, input.ID)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("delete group: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if rows == 0 {
+		_ = tx.Rollback()
+		return errors.New("group not found")
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete group: %w", err)
+	}
+
+	return nil
 }
 
 func (m *Manager) DeleteTodo(id string) error {
@@ -401,11 +558,12 @@ func (m *Manager) findByID(id string) (*Todo, error) {
 	var todo Todo
 	var dueDate sql.NullString
 	err := m.db.QueryRow(`
-		SELECT id, title, summary, detail_markdown, is_completed, due_date, created_at, updated_at
+		SELECT id, group_id, title, summary, detail_markdown, is_completed, due_date, created_at, updated_at
 		FROM todos
 		WHERE id = ?
 	`, id).Scan(
 		&todo.ID,
+		&todo.GroupID,
 		&todo.Title,
 		&todo.Summary,
 		&todo.DetailMarkdown,
@@ -434,8 +592,21 @@ func openDB(path string) (*sql.DB, error) {
 	}
 
 	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS todo_groups (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			created_at TIMESTAMP NOT NULL,
+			updated_at TIMESTAMP NOT NULL
+		)
+	`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create todo_groups table: %w", err)
+	}
+
+	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS todos (
 			id TEXT PRIMARY KEY,
+			group_id TEXT NOT NULL DEFAULT '',
 			title TEXT NOT NULL,
 			summary TEXT NOT NULL DEFAULT '',
 			detail_markdown TEXT NOT NULL DEFAULT '',
@@ -450,6 +621,14 @@ func openDB(path string) (*sql.DB, error) {
 	}
 
 	if err := ensureTodoSchema(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := ensureDefaultGroup(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := ensureTodoGroupAssignments(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -477,6 +656,43 @@ func openDB(path string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+func (m *Manager) findGroupByID(id string) (*Group, error) {
+	var group Group
+	err := m.db.QueryRow(`
+		SELECT id, name, created_at, updated_at
+		FROM todo_groups
+		WHERE id = ?
+	`, id).Scan(
+		&group.ID,
+		&group.Name,
+		&group.CreatedAt,
+		&group.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("group not found")
+		}
+		return nil, fmt.Errorf("query group: %w", err)
+	}
+	return &group, nil
+}
+
+func (m *Manager) resolveGroupID(groupID string) (string, error) {
+	groupID = strings.TrimSpace(groupID)
+	if groupID == "" {
+		return defaultGroupID, nil
+	}
+
+	var count int
+	if err := m.db.QueryRow(`SELECT COUNT(1) FROM todo_groups WHERE id = ?`, groupID).Scan(&count); err != nil {
+		return "", fmt.Errorf("check group: %w", err)
+	}
+	if count == 0 {
+		return "", errors.New("group not found")
+	}
+	return groupID, nil
 }
 
 func (m *Manager) loadSubitems(todo *Todo) error {
@@ -557,6 +773,47 @@ func ensureTodoSchema(db *sql.DB) error {
 		if !strings.Contains(errText, "duplicate column name") {
 			return fmt.Errorf("ensure due_date column: %w", err)
 		}
+	}
+	if _, err := db.Exec(`ALTER TABLE todos ADD COLUMN group_id TEXT NOT NULL DEFAULT ''`); err != nil {
+		errText := strings.ToLower(err.Error())
+		if !strings.Contains(errText, "duplicate column name") {
+			return fmt.Errorf("ensure group_id column: %w", err)
+		}
+	}
+	return nil
+}
+
+const (
+	defaultGroupID   = "default"
+	defaultGroupName = "默认分组"
+)
+
+func ensureDefaultGroup(db *sql.DB) error {
+	now := time.Now()
+	if _, err := db.Exec(`
+		INSERT INTO todo_groups (id, name, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(id) DO NOTHING
+	`, defaultGroupID, defaultGroupName, now, now); err != nil {
+		return fmt.Errorf("ensure default group: %w", err)
+	}
+	if _, err := db.Exec(`
+		UPDATE todo_groups
+		SET name = ?, updated_at = ?
+		WHERE id = ?
+	`, defaultGroupName, now, defaultGroupID); err != nil {
+		return fmt.Errorf("normalize default group name: %w", err)
+	}
+	return nil
+}
+
+func ensureTodoGroupAssignments(db *sql.DB) error {
+	if _, err := db.Exec(`
+		UPDATE todos
+		SET group_id = ?
+		WHERE group_id IS NULL OR TRIM(group_id) = ''
+	`, defaultGroupID); err != nil {
+		return fmt.Errorf("assign default group: %w", err)
 	}
 	return nil
 }

@@ -7,8 +7,16 @@ export interface TodoSubitem {
   updatedAt: string;
 }
 
+export interface TodoGroup {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Todo {
   id: string;
+  groupId: string;
   title: string;
   summary: string;
   detailMarkdown: string;
@@ -27,10 +35,12 @@ export interface AppConfig {
 
 export interface BootstrapResponse {
   config: AppConfig;
+  groups: TodoGroup[];
   todos: Todo[];
 }
 
 export interface TodoDraft {
+  groupId: string;
   title: string;
   summary: string;
   detailMarkdown: string;

@@ -1,4 +1,4 @@
-import type { BootstrapResponse, Todo, TodoDraft } from '../types';
+import type { BootstrapResponse, Todo, TodoDraft, TodoGroup } from '../types';
 
 declare global {
   interface Window {
@@ -6,7 +6,11 @@ declare global {
       main?: {
         App?: {
           GetBootstrap: () => Promise<BootstrapResponse>;
+          ListGroups: () => Promise<TodoGroup[]>;
+          UpdateGroup: (payload: { id: string; name: string }) => Promise<TodoGroup>;
+          DeleteGroup: (payload: { id: string; deleteTodos: boolean }) => Promise<BootstrapResponse>;
           ListTodos: () => Promise<Todo[]>;
+          CreateGroup: (payload: { name: string }) => Promise<TodoGroup>;
           CreateTodo: (payload: Partial<TodoDraft>) => Promise<Todo>;
           UpdateTodo: (payload: Partial<TodoDraft> & { id: string }) => Promise<Todo>;
           DeleteTodo: (id: string) => Promise<void>;
@@ -34,7 +38,11 @@ function appBinding() {
 
 export const backend = {
   getBootstrap: () => appBinding().GetBootstrap(),
+  listGroups: () => appBinding().ListGroups(),
+  updateGroup: (payload: { id: string; name: string }) => appBinding().UpdateGroup(payload),
+  deleteGroup: (payload: { id: string; deleteTodos: boolean }) => appBinding().DeleteGroup(payload),
   listTodos: () => appBinding().ListTodos(),
+  createGroup: (payload: { name: string }) => appBinding().CreateGroup(payload),
   createTodo: (payload: Partial<TodoDraft>) => appBinding().CreateTodo(payload),
   updateTodo: (payload: Partial<TodoDraft> & { id: string }) => appBinding().UpdateTodo(payload),
   deleteTodo: (id: string) => appBinding().DeleteTodo(id),

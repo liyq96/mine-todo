@@ -6,6 +6,7 @@ import type { Locale } from './appTypes';
 import { CalendarModal } from './features/calendar/CalendarModal';
 import { DueDatePickerModal } from './features/calendar/DueDatePickerModal';
 import { SettingsModal } from './features/settings/SettingsModal';
+import { DeleteGroupConfirm } from './features/todos/DeleteGroupConfirm';
 import { DeleteTodoConfirm } from './features/todos/DeleteTodoConfirm';
 import { TodoDetailPane } from './features/todos/TodoDetailPane';
 import { TodoSidebar } from './features/todos/TodoSidebar';
@@ -16,17 +17,20 @@ import { useSettingsController } from './hooks/useSettingsController';
 import { useTodoScrollSync } from './hooks/useTodoScrollSync';
 import { useTodoWorkspace } from './hooks/useTodoWorkspace';
 import { formatCreatedAt, formatDueDate, parseDateKey, startOfDay, startOfMonth } from './lib/date';
-import type { Todo } from './types';
-
+import type { Todo, TodoGroup } from './types';
 
 function App() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [groupPendingDelete, setGroupPendingDelete] = useState<TodoGroup | null>(null);
+  const [deleteGroupTodos, setDeleteGroupTodos] = useState(false);
 
   const {
     config,
+    groups,
     todos,
     selectedId,
+    activeGroupId,
     draft,
     loading,
     quickTitle,
@@ -40,6 +44,10 @@ function App() {
     applyBootstrap,
     syncUpdatedTodo,
     selectTodo,
+    selectGroup,
+    handleCreateGroup,
+    handleRenameGroup,
+    handleDeleteGroup,
     handleCreateTodo,
     handleDeleteTodo,
     handleToggleCompleted,
@@ -48,13 +56,58 @@ function App() {
     setSaving,
     setError,
   });
+
   const locale: Locale = config?.language ?? 'zh-CN';
   const copy = messages[locale];
+  const sidebarGroupCopy =
+    locale === 'zh-CN'
+      ? {
+          groupsTitle: '目录',
+          addGroup: '新建目录',
+          addGroupPlaceholder: '输入目录名称',
+          emptyGroup: '该目录下还没有待办',
+          renameGroup: '重命名',
+          deleteGroup: '删除',
+          defaultGroupName: '默认分组',
+        }
+      : {
+          groupsTitle: 'Folders',
+          addGroup: 'New Folder',
+          addGroupPlaceholder: 'Enter folder name',
+          emptyGroup: 'No todos in this folder yet.',
+          renameGroup: 'Rename',
+          deleteGroup: 'Delete',
+          defaultGroupName: 'Default Group',
+        };
+  const groupDetailCopy =
+    locale === 'zh-CN'
+      ? {
+          groupLabel: '目录',
+          deleteTitle: '确认删除目录',
+          deleteDescription: groupPendingDelete ? `将删除目录“${groupPendingDelete.name}”。` : '将删除当前目录。',
+          deleteCheckbox: '是否删除该目录下的所有待办',
+          deleteHint: '不勾选时，该目录下的待办会归到“默认分组”目录。',
+          deleteConfirm: '删除目录',
+        }
+      : {
+          groupLabel: 'Folder',
+          deleteTitle: 'Confirm Folder Deletion',
+          deleteDescription: groupPendingDelete ? `Delete folder "${groupPendingDelete.name}".` : 'Delete the current folder.',
+          deleteCheckbox: 'Delete all todos in this folder',
+          deleteHint: 'If unchecked, todos in this folder will be moved to Default Group.',
+          deleteConfirm: 'Delete Folder',
+        };
+
+  const selectedGroupName =
+    groups.find((group) => group.id === (isEditing ? draft.groupId : selectedTodo?.groupId))?.name ??
+    sidebarGroupCopy.defaultGroupName;
+
   const detailHTML = useMemo(() => {
     const source = isEditing ? draft.detailMarkdown : selectedTodo?.detailMarkdown;
     const html = marked.parse(source || '', { breaks: true }) as string;
     return DOMPurify.sanitize(html);
   }, [draft.detailMarkdown, isEditing, selectedTodo?.detailMarkdown]);
+
   const {
     isDueDatePickerOpen,
     setIsDueDatePickerOpen,
@@ -76,22 +129,22 @@ function App() {
     shiftCalendar,
     openDueDatePicker,
   } = useCalendarState(todos, locale, draft.dueDate);
+
   const { registerTodoRef, requestScrollToTodo } = useTodoScrollSync(selectedId, todos);
+
   const {
     storageInput,
-    setStorageInput,
     isSettingsOpen,
-    setIsSettingsOpen,
     settingsTab,
-    setSettingsTab,
     isDirectoryConfirmOpen,
-    setIsDirectoryConfirmOpen,
     openSettings,
     closeSettings,
     handleRequestStorageDirChange,
     handleConfirmStorageDir,
     handleBrowseStorageDir,
     handleChangeLanguage,
+    setSettingsTab,
+    setIsDirectoryConfirmOpen,
   } = useSettingsController({
     storageDir: config?.storageDir ?? '',
     locale,
@@ -104,6 +157,7 @@ function App() {
       setSaveStatus('saved');
     },
   });
+
   const { saveStatus, setSaveStatus } = useTodoAutosave({
     selectedId,
     selectedTodo,
@@ -114,6 +168,7 @@ function App() {
     unknownErrorText: copy.unknownError as string,
     syncUpdatedTodo,
   });
+
   const {
     visibleSubitems,
     selectedSubitemIds,
@@ -180,6 +235,27 @@ function App() {
     setSaveStatus('saved');
   }
 
+  async function handleRenameSelectedGroup(id: string, name: string) {
+    await handleRenameGroup(id, name);
+    setSaveStatus('saved');
+  }
+
+  function requestDeleteGroup(group: TodoGroup) {
+    setGroupPendingDelete(group);
+    setDeleteGroupTodos(false);
+  }
+
+  async function confirmDeleteGroup() {
+    if (!groupPendingDelete) {
+      return;
+    }
+    clearSubitemEditingState();
+    await handleDeleteGroup(groupPendingDelete.id, deleteGroupTodos);
+    setGroupPendingDelete(null);
+    setDeleteGroupTodos(false);
+    setSaveStatus('saved');
+  }
+
   function openCalendarBoard() {
     setIsEditing(false);
     clearSubitemEditingState();
@@ -196,6 +272,7 @@ function App() {
     setDraft((current) => ({ ...current, dueDate: value }));
     setIsDueDatePickerOpen(false);
   }
+
   const createdAtText = useMemo(
     () => (selectedTodo ? formatCreatedAt(selectedTodo.createdAt, locale, copy) : ''),
     [copy, locale, selectedTodo],
@@ -216,19 +293,33 @@ function App() {
             emptyTodos: copy.emptyTodos,
             untitledTodo: copy.untitledTodo,
             noSummary: copy.noSummary,
+            groupsTitle: sidebarGroupCopy.groupsTitle,
+            addGroup: sidebarGroupCopy.addGroup,
+            addGroupPlaceholder: sidebarGroupCopy.addGroupPlaceholder,
+            emptyGroup: sidebarGroupCopy.emptyGroup,
+            renameGroup: sidebarGroupCopy.renameGroup,
+            deleteGroup: sidebarGroupCopy.deleteGroup,
+            defaultGroupName: sidebarGroupCopy.defaultGroupName,
           }}
           quickTitle={quickTitle}
           isCalendarOpen={isCalendarOpen}
           loading={loading}
+          saving={saving}
+          groups={groups}
           todos={todos}
           selectedId={selectedId}
+          activeGroupId={activeGroupId}
           onOpenSettings={() => openSettings('data')}
           onQuickTitleChange={setQuickTitle}
           onQuickCreate={() => void handleCreateNewTodo()}
           onOpenCalendarBoard={openCalendarBoard}
           onRegisterTodoRef={registerTodoRef}
           onSelectTodo={handleSelectTodo}
+          onSelectGroup={selectGroup}
           onToggleCompleted={(todo) => void handleTodoCompletedToggle(todo)}
+          onCreateGroup={(name) => void handleCreateGroup(name)}
+          onRenameGroup={(id, name) => void handleRenameSelectedGroup(id, name)}
+          onRequestDeleteGroup={requestDeleteGroup}
         />
 
         <TodoDetailPane
@@ -242,6 +333,7 @@ function App() {
             delete: copy.delete,
             titlePlaceholder: copy.titlePlaceholder,
             summaryPlaceholder: copy.summaryPlaceholder,
+            groupLabel: groupDetailCopy.groupLabel,
             dueDateLabel: copy.dueDateLabel,
             dueDateNone: copy.dueDateNone,
             clearDate: copy.clearDate,
@@ -260,6 +352,8 @@ function App() {
           isEditing={isEditing}
           saving={saving}
           draft={draft}
+          groups={groups}
+          selectedGroupName={selectedGroupName}
           detailHTML={detailHTML}
           visibleSubitems={visibleSubitems}
           pendingSubitems={pendingSubitems}
@@ -270,6 +364,7 @@ function App() {
           onEnterEditMode={() => setIsEditing(true)}
           onRequestDelete={requestDeleteTodo}
           onDraftChange={(updater) => setDraft(updater)}
+          onDraftGroupChange={(groupId) => setDraft((current) => ({ ...current, groupId }))}
           onOpenDueDatePicker={openDueDatePicker}
           onDeleteSelectedSubitems={() => void handleDeleteSelectedSubitems()}
           onAddSubitemInput={handleAddSubitemInput}
@@ -341,6 +436,24 @@ function App() {
         saving={saving}
         onClose={() => setIsDeleteConfirmOpen(false)}
         onConfirm={() => void handleConfirmDeleteTodo()}
+      />
+
+      <DeleteGroupConfirm
+        isOpen={groupPendingDelete !== null}
+        title={groupDetailCopy.deleteTitle}
+        description={groupDetailCopy.deleteDescription}
+        checkboxLabel={groupDetailCopy.deleteCheckbox}
+        hint={groupDetailCopy.deleteHint}
+        checked={deleteGroupTodos}
+        cancelLabel={copy.cancel}
+        confirmLabel={groupDetailCopy.deleteConfirm}
+        saving={saving}
+        onCheckedChange={setDeleteGroupTodos}
+        onClose={() => {
+          setGroupPendingDelete(null);
+          setDeleteGroupTodos(false);
+        }}
+        onConfirm={() => void confirmDeleteGroup()}
       />
 
       <DueDatePickerModal

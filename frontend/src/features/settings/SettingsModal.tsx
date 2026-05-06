@@ -1,3 +1,4 @@
+import { IconFolderOpen, IconX } from '@tabler/icons-react';
 import type { AppConfig } from '../../types';
 
 type SettingsTab = 'data' | 'language' | 'about';
@@ -84,7 +85,7 @@ export function SettingsModal({
         <div className="settings-modal__header">
           <h2>{copy.settingsTitle}</h2>
           <button type="button" className="icon-button" onClick={onClose} aria-label={copy.close}>
-            ×
+            <IconX size={16} stroke={2} />
           </button>
         </div>
 
@@ -116,11 +117,13 @@ export function SettingsModal({
                   </div>
                   <button
                     type="button"
-                    className="topbar-link"
+                    className="settings-path-action"
                     onClick={onBrowseStorageDir}
                     disabled={saving}
+                    aria-label={copy.chooseDirectory}
+                    title={copy.chooseDirectory}
                   >
-                    {copy.chooseDirectory}
+                    <IconFolderOpen size={16} stroke={2} />
                   </button>
                 </div>
               </label>

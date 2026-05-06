@@ -1,4 +1,6 @@
-import type { Todo, TodoDraft, TodoSubitem } from '../../types';
+import { IconChevronDown, IconFolder, IconPlus, IconX } from '@tabler/icons-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Todo, TodoDraft, TodoGroup, TodoSubitem } from '../../types';
 
 type PendingSubitem = { id: string; content: string };
 
@@ -12,6 +14,7 @@ type DetailCopy = {
   delete: string;
   titlePlaceholder: string;
   summaryPlaceholder: string;
+  groupLabel: string;
   dueDateLabel: string;
   dueDateNone: string;
   clearDate: string;
@@ -35,6 +38,8 @@ type TodoDetailPaneProps = {
   isEditing: boolean;
   saving: boolean;
   draft: TodoDraft;
+  groups: TodoGroup[];
+  selectedGroupName: string;
   detailHTML: string;
   visibleSubitems: TodoSubitem[];
   pendingSubitems: PendingSubitem[];
@@ -45,6 +50,7 @@ type TodoDetailPaneProps = {
   onEnterEditMode: () => void;
   onRequestDelete: () => void;
   onDraftChange: (updater: (current: TodoDraft) => TodoDraft) => void;
+  onDraftGroupChange: (groupId: string) => void;
   onOpenDueDatePicker: () => void;
   onDeleteSelectedSubitems: () => void;
   onAddSubitemInput: () => void;
@@ -70,6 +76,8 @@ export function TodoDetailPane({
   isEditing,
   saving,
   draft,
+  groups,
+  selectedGroupName,
   detailHTML,
   visibleSubitems,
   pendingSubitems,
@@ -80,6 +88,7 @@ export function TodoDetailPane({
   onEnterEditMode,
   onRequestDelete,
   onDraftChange,
+  onDraftGroupChange,
   onOpenDueDatePicker,
   onDeleteSelectedSubitems,
   onAddSubitemInput,
@@ -95,6 +104,39 @@ export function TodoDetailPane({
   formattedDraftDueDate,
   formattedSelectedDueDate,
 }: TodoDetailPaneProps) {
+  const [isGroupPickerOpen, setIsGroupPickerOpen] = useState(false);
+  const groupPickerRef = useRef<HTMLDivElement | null>(null);
+
+  const activeGroupName = useMemo(
+    () => groups.find((group) => group.id === draft.groupId)?.name ?? selectedGroupName,
+    [draft.groupId, groups, selectedGroupName],
+  );
+
+  useEffect(() => {
+    if (!isGroupPickerOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!groupPickerRef.current?.contains(event.target as Node)) {
+        setIsGroupPickerOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsGroupPickerOpen(false);
+      }
+    }
+
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isGroupPickerOpen]);
+
   return (
     <main className="detail-panel">
       {error ? <div className="error-banner">{error}</div> : null}
@@ -142,6 +184,44 @@ export function TodoDetailPane({
                   placeholder={copy.summaryPlaceholder}
                 />
                 <div className="detail-date-field">
+                  <span>{copy.groupLabel}</span>
+                  <div ref={groupPickerRef} className="detail-select-wrap">
+                    <button
+                      type="button"
+                      className={`detail-group-picker ${isGroupPickerOpen ? 'is-open' : ''}`}
+                      onClick={() => setIsGroupPickerOpen((current) => !current)}
+                    >
+                      <span className="detail-group-picker__value">
+                        <IconFolder size={15} stroke={2} />
+                        <strong>{activeGroupName}</strong>
+                      </span>
+                      <span className="detail-group-picker__icon">
+                        <IconChevronDown size={14} stroke={2} />
+                      </span>
+                    </button>
+                    {isGroupPickerOpen ? (
+                      <div className="detail-group-menu">
+                        {groups.map((group) => (
+                          <button
+                            key={group.id}
+                            type="button"
+                            className={`detail-group-menu__item ${draft.groupId === group.id ? 'is-active' : ''}`}
+                            onClick={() => {
+                              onDraftGroupChange(group.id);
+                              setIsGroupPickerOpen(false);
+                            }}
+                          >
+                            <span className="detail-group-menu__item-icon">
+                              <IconFolder size={14} stroke={2} />
+                            </span>
+                            <span>{group.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="detail-date-field">
                   <span>{copy.dueDateLabel}</span>
                   <div className="detail-date-picker-row">
                     <button
@@ -152,7 +232,9 @@ export function TodoDetailPane({
                       <span className={`detail-date-picker__value ${draft.dueDate ? 'has-value' : ''}`}>
                         <strong>{formattedDraftDueDate}</strong>
                       </span>
-                      <span className="detail-date-picker__icon">▾</span>
+                      <span className="detail-date-picker__icon">
+                        <IconChevronDown size={14} stroke={2} />
+                      </span>
                     </button>
                     {draft.dueDate ? (
                       <button
@@ -162,7 +244,7 @@ export function TodoDetailPane({
                         aria-label={copy.clearDate}
                         title={copy.clearDate}
                       >
-                        ×
+                        <IconX size={14} stroke={2} />
                       </button>
                     ) : null}
                   </div>
@@ -188,7 +270,7 @@ export function TodoDetailPane({
               </section>
 
               <section className="detail-section preview-section">
-                <div className="detail-section__header">
+                <div className="detail-section__header detail-section__header--subitems">
                   <h3>{copy.subitemsTitle}</h3>
                   <div className="subitems-toolbar">
                     <button
@@ -207,7 +289,7 @@ export function TodoDetailPane({
                       aria-label={copy.addSubitem}
                       title={copy.addSubitem}
                     >
-                      +
+                      <IconPlus size={16} stroke={2.4} />
                     </button>
                   </div>
                 </div>
@@ -296,6 +378,10 @@ export function TodoDetailPane({
                 <div className="detail-static">
                   <h1 className="detail-title">{selectedTodo.title || copy.untitledTodo}</h1>
                   {selectedTodo.summary ? <p className="detail-summary">{selectedTodo.summary}</p> : null}
+                  <div className="detail-date-display">
+                    <span>{copy.groupLabel}</span>
+                    <strong>{selectedGroupName}</strong>
+                  </div>
                   <div className="detail-date-display">
                     <span>{copy.dueDateLabel}</span>
                     <strong>{formattedSelectedDueDate}</strong>

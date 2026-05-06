@@ -2,6 +2,7 @@ import type { PendingSubitem } from '../appTypes';
 import type { Todo, TodoDraft } from '../types';
 
 export const emptyDraft = (): TodoDraft => ({
+  groupId: '',
   title: '',
   summary: '',
   detailMarkdown: '',
@@ -12,6 +13,7 @@ export const emptyDraft = (): TodoDraft => ({
 
 export function persistableDraft(draft: TodoDraft) {
   return {
+    groupId: draft.groupId,
     title: draft.title,
     summary: draft.summary,
     detailMarkdown: draft.detailMarkdown,
@@ -29,6 +31,7 @@ export function createPendingSubitem(): PendingSubitem {
 
 export function fromTodo(todo: Todo): TodoDraft {
   return {
+    groupId: todo.groupId,
     title: todo.title,
     summary: todo.summary,
     detailMarkdown: todo.detailMarkdown,

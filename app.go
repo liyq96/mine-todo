@@ -44,6 +44,11 @@ func (a *App) beforeClose(_ context.Context) bool {
 }
 
 func (a *App) GetBootstrap() (*BootstrapResponse, error) {
+	groups, err := a.storeManager.ListGroups()
+	if err != nil {
+		return nil, err
+	}
+
 	todos, err := a.storeManager.ListTodos()
 	if err != nil {
 		return nil, err
@@ -52,8 +57,13 @@ func (a *App) GetBootstrap() (*BootstrapResponse, error) {
 	cfg := a.configManager.Current()
 	return &BootstrapResponse{
 		Config: *cfg,
+		Groups: groups,
 		Todos:  todos,
 	}, nil
+}
+
+func (a *App) ListGroups() ([]store.Group, error) {
+	return a.storeManager.ListGroups()
 }
 
 func (a *App) ListTodos() ([]store.Todo, error) {
@@ -61,6 +71,7 @@ func (a *App) ListTodos() ([]store.Todo, error) {
 }
 
 func (a *App) CreateTodo(input store.CreateTodoInput) (*store.Todo, error) {
+	input.GroupID = strings.TrimSpace(input.GroupID)
 	input.Title = strings.TrimSpace(input.Title)
 	input.DueDate = strings.TrimSpace(input.DueDate)
 	if input.Title == "" {
@@ -73,11 +84,43 @@ func (a *App) UpdateTodo(input store.UpdateTodoInput) (*store.Todo, error) {
 	if strings.TrimSpace(input.ID) == "" {
 		return nil, errors.New("todo id is required")
 	}
+	input.GroupID = strings.TrimSpace(input.GroupID)
 	input.DueDate = strings.TrimSpace(input.DueDate)
 	if strings.TrimSpace(input.Title) == "" {
 		return nil, errors.New("title is required")
 	}
 	return a.storeManager.UpdateTodo(input)
+}
+
+func (a *App) CreateGroup(input store.CreateGroupInput) (*store.Group, error) {
+	input.Name = strings.TrimSpace(input.Name)
+	if input.Name == "" {
+		return nil, errors.New("group name is required")
+	}
+	return a.storeManager.CreateGroup(input)
+}
+
+func (a *App) UpdateGroup(input store.UpdateGroupInput) (*store.Group, error) {
+	input.ID = strings.TrimSpace(input.ID)
+	input.Name = strings.TrimSpace(input.Name)
+	if input.ID == "" {
+		return nil, errors.New("group id is required")
+	}
+	if input.Name == "" {
+		return nil, errors.New("group name is required")
+	}
+	return a.storeManager.UpdateGroup(input)
+}
+
+func (a *App) DeleteGroup(input store.DeleteGroupInput) (*BootstrapResponse, error) {
+	input.ID = strings.TrimSpace(input.ID)
+	if input.ID == "" {
+		return nil, errors.New("group id is required")
+	}
+	if err := a.storeManager.DeleteGroup(input); err != nil {
+		return nil, err
+	}
+	return a.GetBootstrap()
 }
 
 func (a *App) DeleteTodo(id string) error {
@@ -160,6 +203,11 @@ func (a *App) UpdateStorageDirectory(path string, copyData bool) (*BootstrapResp
 		return nil, err
 	}
 
+	groups, err := a.storeManager.ListGroups()
+	if err != nil {
+		return nil, err
+	}
+
 	todos, err := a.storeManager.ListTodos()
 	if err != nil {
 		return nil, err
@@ -167,6 +215,7 @@ func (a *App) UpdateStorageDirectory(path string, copyData bool) (*BootstrapResp
 
 	return &BootstrapResponse{
 		Config: *cfg,
+		Groups: groups,
 		Todos:  todos,
 	}, nil
 }
@@ -177,6 +226,11 @@ func (a *App) UpdateLanguage(language string) (*BootstrapResponse, error) {
 		return nil, err
 	}
 
+	groups, err := a.storeManager.ListGroups()
+	if err != nil {
+		return nil, err
+	}
+
 	todos, err := a.storeManager.ListTodos()
 	if err != nil {
 		return nil, err
@@ -184,6 +238,7 @@ func (a *App) UpdateLanguage(language string) (*BootstrapResponse, error) {
 
 	return &BootstrapResponse{
 		Config: *cfg,
+		Groups: groups,
 		Todos:  todos,
 	}, nil
 }
@@ -207,5 +262,6 @@ func (a *App) SelectStorageDirectory() (string, error) {
 
 type BootstrapResponse struct {
 	Config config.AppConfig `json:"config"`
+	Groups []store.Group    `json:"groups"`
 	Todos  []store.Todo     `json:"todos"`
 }
