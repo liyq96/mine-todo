@@ -47,7 +47,7 @@ type Subitem struct {
 }
 
 type CreateTodoInput struct {
-	GroupID         string `json:"groupId"`
+	GroupID        string `json:"groupId"`
 	Title          string `json:"title"`
 	Summary        string `json:"summary"`
 	DetailMarkdown string `json:"detailMarkdown"`

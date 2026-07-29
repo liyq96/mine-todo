@@ -1,0 +1,12 @@
+# Normalize line endings; force LF for source files that gofmt expects.
+*.go text eol=lf
+*.mod text eol=lf
+*.sum text eol=lf
+
+# Frontend / docs keep LF as well.
+*.ts text eol=lf
+*.tsx text eol=lf
+*.css text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.html text eol=lf

@@ -1,8 +1,8 @@
 import { IconFolderOpen, IconX } from '@tabler/icons-react';
+import * as RadioGroup from '@radix-ui/react-radio-group';
+import { Modal } from '../_primitives/Modal';
+import type { Locale, SettingsTab } from '../../appTypes';
 import type { AppConfig } from '../../types';
-
-type SettingsTab = 'data' | 'language' | 'about';
-type Locale = 'zh-CN' | 'en-US';
 
 type SettingsCopy = {
   settingsTitle: string;
@@ -75,163 +75,167 @@ export function SettingsModal({
   onCloseDirectoryConfirm,
   onConfirmStorageDir,
 }: SettingsModalProps) {
-  if (!isOpen) {
-    return null;
-  }
-
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="settings-modal" onClick={(event) => event.stopPropagation()}>
-        <div className="settings-modal__header">
-          <h2>{copy.settingsTitle}</h2>
-          <button type="button" className="icon-button" onClick={onClose} aria-label={copy.close}>
-            <IconX size={16} stroke={2} />
+    <Modal open={isOpen} onClose={onClose} contentClassName="settings-modal">
+      <div className="settings-modal__header">
+        <h2>{copy.settingsTitle}</h2>
+        <button type="button" className="icon-button" onClick={onClose} aria-label={copy.close}>
+          <IconX size={16} stroke={2} />
+        </button>
+      </div>
+
+      <div className="settings-tabs">
+        {(['data', 'language', 'about'] as SettingsTab[]).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            className={`settings-tab ${settingsTab === tab ? 'is-active' : ''}`}
+            onClick={() => onTabChange(tab)}
+          >
+            {copy.tabs[tab]}
           </button>
-        </div>
+        ))}
+      </div>
 
-        <div className="settings-tabs">
-          {(['data', 'language', 'about'] as SettingsTab[]).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              className={`settings-tab ${settingsTab === tab ? 'is-active' : ''}`}
-              onClick={() => onTabChange(tab)}
-            >
-              {copy.tabs[tab]}
-            </button>
-          ))}
-        </div>
-
-        <div className="settings-panel">
-          {settingsTab === 'data' ? (
-            <section className="settings-pane">
-              <div className="settings-pane__header">
-                <h3>{copy.dataTitle}</h3>
-                <p>{copy.dataDescription}</p>
-              </div>
-              <label className="settings-field">
-                <span>{copy.directoryLabel}</span>
-                <div className="settings-path-row">
-                  <div className="settings-path-value" title={storageInput}>
-                    {storageInput || copy.loading}
-                  </div>
-                  <button
-                    type="button"
-                    className="settings-path-action"
-                    onClick={onBrowseStorageDir}
-                    disabled={saving}
-                    aria-label={copy.chooseDirectory}
-                    title={copy.chooseDirectory}
-                  >
-                    <IconFolderOpen size={16} stroke={2} />
-                  </button>
+      <div className="settings-panel">
+        {settingsTab === 'data' ? (
+          <section className="settings-pane">
+            <div className="settings-pane__header">
+              <h3>{copy.dataTitle}</h3>
+              <p>{copy.dataDescription}</p>
+            </div>
+            <label className="settings-field">
+              <span>{copy.directoryLabel}</span>
+              <div className="settings-path-row">
+                <div className="settings-path-value" title={storageInput}>
+                  {storageInput || copy.loading}
                 </div>
-              </label>
-              <div className="settings-meta">{config?.dbPath ?? copy.loading}</div>
-              <div className="settings-actions">
-                <button type="button" className="topbar-link" onClick={onClose}>
-                  {copy.cancel}
-                </button>
                 <button
                   type="button"
-                  className="topbar-link"
-                  onClick={onRequestStorageDirChange}
-                  disabled={saving || !storageInput.trim() || storageInput.trim() === config?.storageDir}
+                  className="settings-path-action"
+                  onClick={onBrowseStorageDir}
+                  disabled={saving}
+                  aria-label={copy.chooseDirectory}
+                  title={copy.chooseDirectory}
                 >
-                  {copy.saveDirectory}
+                  <IconFolderOpen size={16} stroke={2} />
                 </button>
               </div>
-            </section>
-          ) : null}
+            </label>
+            <div className="settings-meta">{config?.dbPath ?? copy.loading}</div>
+            <div className="settings-actions">
+              <button type="button" className="topbar-link" onClick={onClose}>
+                {copy.cancel}
+              </button>
+              <button
+                type="button"
+                className="topbar-link"
+                onClick={onRequestStorageDirChange}
+                disabled={saving || !storageInput.trim() || storageInput.trim() === config?.storageDir}
+              >
+                {copy.saveDirectory}
+              </button>
+            </div>
+          </section>
+        ) : null}
 
-          {settingsTab === 'language' ? (
-            <section className="settings-pane">
-              <div className="settings-pane__header">
-                <h3>{copy.languageTitle}</h3>
-                <p>{copy.languageDescription}</p>
-              </div>
-              <div className="language-options" role="radiogroup" aria-label={copy.languageLabel}>
-                {(['zh-CN', 'en-US'] as Locale[]).map((language) => (
-                  <button
-                    key={language}
-                    type="button"
-                    className={`language-option ${locale === language ? 'is-active' : ''}`}
-                    onClick={() => onChangeLanguage(language)}
-                    disabled={saving}
-                  >
+        {settingsTab === 'language' ? (
+          <section className="settings-pane">
+            <div className="settings-pane__header">
+              <h3>{copy.languageTitle}</h3>
+              <p>{copy.languageDescription}</p>
+            </div>
+            <RadioGroup.Root
+              className="language-options"
+              role="radiogroup"
+              aria-label={copy.languageLabel}
+              value={locale}
+              onValueChange={(value) => onChangeLanguage(value as Locale)}
+              disabled={saving}
+            >
+              {(['zh-CN', 'en-US'] as Locale[]).map((language) => (
+                <label key={language} className={`language-option ${locale === language ? 'is-active' : ''}`}>
+                  <RadioGroup.Item value={language} className="language-option__radio" disabled={saving}>
+                    <RadioGroup.Indicator className="language-option__indicator" />
+                  </RadioGroup.Item>
+                  <span className="language-option__copy">
                     <strong>{copy.languageOptions[language].label}</strong>
                     <span>{copy.languageOptions[language].hint}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null}
+                  </span>
+                </label>
+              ))}
+            </RadioGroup.Root>
+          </section>
+        ) : null}
 
-          {settingsTab === 'about' ? (
-            <section className="settings-pane">
-              <div className="settings-pane__header">
-                <h3>{copy.aboutTitle}</h3>
-                <p>{copy.aboutDescription}</p>
+        {settingsTab === 'about' ? (
+          <section className="settings-pane">
+            <div className="settings-pane__header">
+              <h3>{copy.aboutTitle}</h3>
+              <p>{copy.aboutDescription}</p>
+            </div>
+            <div className="about-grid">
+              <div className="about-item">
+                <span>{copy.projectName}</span>
+                <strong>{appInfo.name}</strong>
               </div>
-              <div className="about-grid">
-                <div className="about-item">
-                  <span>{copy.projectName}</span>
-                  <strong>{appInfo.name}</strong>
-                </div>
-                <div className="about-item">
-                  <span>{copy.version}</span>
-                  <strong>{appInfo.version}</strong>
-                </div>
-                <div className="about-item">
-                  <span>{copy.releaseDate}</span>
-                  <strong>{appInfo.releaseDate}</strong>
-                </div>
+              <div className="about-item">
+                <span>{copy.version}</span>
+                <strong>{appInfo.version}</strong>
               </div>
-            </section>
-          ) : null}
-        </div>
-
-        {isDirectoryConfirmOpen ? (
-          <div className="settings-confirm-overlay">
-            <div className="settings-confirm-card">
-              <div className="settings-pane__header">
-                <h3>{copy.switchDirectoryTitle}</h3>
-                <p>{copy.switchDirectoryDescription}</p>
-              </div>
-              <div className="language-options">
-                <button
-                  type="button"
-                  className="language-option"
-                  onClick={() => onConfirmStorageDir('copy')}
-                  disabled={saving}
-                >
-                  <strong>{copy.switchDirectoryCopy}</strong>
-                  <span>{copy.switchDirectoryCopyHint}</span>
-                </button>
-                <button
-                  type="button"
-                  className="language-option"
-                  onClick={() => onConfirmStorageDir('fresh')}
-                  disabled={saving}
-                >
-                  <strong>{copy.switchDirectoryFresh}</strong>
-                  <span>{copy.switchDirectoryFreshHint}</span>
-                </button>
-              </div>
-              <div className="settings-actions">
-                <button
-                  type="button"
-                  className="topbar-link"
-                  onClick={onCloseDirectoryConfirm}
-                  disabled={saving}
-                >
-                  {copy.cancel}
-                </button>
+              <div className="about-item">
+                <span>{copy.releaseDate}</span>
+                <strong>{appInfo.releaseDate}</strong>
               </div>
             </div>
-          </div>
+          </section>
         ) : null}
       </div>
-    </div>
+
+      {isDirectoryConfirmOpen ? (
+        <div className="settings-confirm-overlay">
+          <div className="settings-confirm-card">
+            <div className="settings-pane__header">
+              <h3>{copy.switchDirectoryTitle}</h3>
+              <p>{copy.switchDirectoryDescription}</p>
+            </div>
+            <div className="language-options">
+              <button
+                type="button"
+                className="language-option"
+                onClick={() => onConfirmStorageDir('copy')}
+                disabled={saving}
+              >
+                <span className="language-option__copy">
+                  <strong>{copy.switchDirectoryCopy}</strong>
+                  <span>{copy.switchDirectoryCopyHint}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="language-option"
+                onClick={() => onConfirmStorageDir('fresh')}
+                disabled={saving}
+              >
+                <span className="language-option__copy">
+                  <strong>{copy.switchDirectoryFresh}</strong>
+                  <span>{copy.switchDirectoryFreshHint}</span>
+                </span>
+              </button>
+            </div>
+            <div className="settings-actions">
+              <button
+                type="button"
+                className="topbar-link"
+                onClick={onCloseDirectoryConfirm}
+                disabled={saving}
+              >
+                {copy.cancel}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </Modal>
   );
 }

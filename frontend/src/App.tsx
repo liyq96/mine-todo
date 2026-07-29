@@ -59,48 +59,10 @@ function App() {
 
   const locale: Locale = config?.language ?? 'zh-CN';
   const copy = messages[locale];
-  const sidebarGroupCopy =
-    locale === 'zh-CN'
-      ? {
-          groupsTitle: '目录',
-          addGroup: '新建目录',
-          addGroupPlaceholder: '输入目录名称',
-          emptyGroup: '该目录下还没有待办',
-          renameGroup: '重命名',
-          deleteGroup: '删除',
-          defaultGroupName: '默认分组',
-        }
-      : {
-          groupsTitle: 'Folders',
-          addGroup: 'New Folder',
-          addGroupPlaceholder: 'Enter folder name',
-          emptyGroup: 'No todos in this folder yet.',
-          renameGroup: 'Rename',
-          deleteGroup: 'Delete',
-          defaultGroupName: 'Default Group',
-        };
-  const groupDetailCopy =
-    locale === 'zh-CN'
-      ? {
-          groupLabel: '目录',
-          deleteTitle: '确认删除目录',
-          deleteDescription: groupPendingDelete ? `将删除目录“${groupPendingDelete.name}”。` : '将删除当前目录。',
-          deleteCheckbox: '是否删除该目录下的所有待办',
-          deleteHint: '不勾选时，该目录下的待办会归到“默认分组”目录。',
-          deleteConfirm: '删除目录',
-        }
-      : {
-          groupLabel: 'Folder',
-          deleteTitle: 'Confirm Folder Deletion',
-          deleteDescription: groupPendingDelete ? `Delete folder "${groupPendingDelete.name}".` : 'Delete the current folder.',
-          deleteCheckbox: 'Delete all todos in this folder',
-          deleteHint: 'If unchecked, todos in this folder will be moved to Default Group.',
-          deleteConfirm: 'Delete Folder',
-        };
 
   const selectedGroupName =
     groups.find((group) => group.id === (isEditing ? draft.groupId : selectedTodo?.groupId))?.name ??
-    sidebarGroupCopy.defaultGroupName;
+    copy.sidebarGroup.defaultGroupName;
 
   const detailHTML = useMemo(() => {
     const source = isEditing ? draft.detailMarkdown : selectedTodo?.detailMarkdown;
@@ -293,13 +255,13 @@ function App() {
             emptyTodos: copy.emptyTodos,
             untitledTodo: copy.untitledTodo,
             noSummary: copy.noSummary,
-            groupsTitle: sidebarGroupCopy.groupsTitle,
-            addGroup: sidebarGroupCopy.addGroup,
-            addGroupPlaceholder: sidebarGroupCopy.addGroupPlaceholder,
-            emptyGroup: sidebarGroupCopy.emptyGroup,
-            renameGroup: sidebarGroupCopy.renameGroup,
-            deleteGroup: sidebarGroupCopy.deleteGroup,
-            defaultGroupName: sidebarGroupCopy.defaultGroupName,
+            groupsTitle: copy.sidebarGroup.groupsTitle,
+            addGroup: copy.sidebarGroup.addGroup,
+            addGroupPlaceholder: copy.sidebarGroup.addGroupPlaceholder,
+            emptyGroup: copy.sidebarGroup.emptyGroup,
+            renameGroup: copy.sidebarGroup.renameGroup,
+            deleteGroup: copy.sidebarGroup.deleteGroup,
+            defaultGroupName: copy.sidebarGroup.defaultGroupName,
           }}
           quickTitle={quickTitle}
           isCalendarOpen={isCalendarOpen}
@@ -333,7 +295,7 @@ function App() {
             delete: copy.delete,
             titlePlaceholder: copy.titlePlaceholder,
             summaryPlaceholder: copy.summaryPlaceholder,
-            groupLabel: groupDetailCopy.groupLabel,
+            groupLabel: copy.groupDetail.groupLabel,
             dueDateLabel: copy.dueDateLabel,
             dueDateNone: copy.dueDateNone,
             clearDate: copy.clearDate,
@@ -440,13 +402,13 @@ function App() {
 
       <DeleteGroupConfirm
         isOpen={groupPendingDelete !== null}
-        title={groupDetailCopy.deleteTitle}
-        description={groupDetailCopy.deleteDescription}
-        checkboxLabel={groupDetailCopy.deleteCheckbox}
-        hint={groupDetailCopy.deleteHint}
+        title={copy.groupDetail.deleteTitle}
+        description={copy.groupDetail.deleteDescription(groupPendingDelete?.name ?? '')}
+        checkboxLabel={copy.groupDetail.deleteCheckbox}
+        hint={copy.groupDetail.deleteHint}
         checked={deleteGroupTodos}
         cancelLabel={copy.cancel}
-        confirmLabel={groupDetailCopy.deleteConfirm}
+        confirmLabel={copy.groupDetail.deleteConfirm}
         saving={saving}
         onCheckedChange={setDeleteGroupTodos}
         onClose={() => {

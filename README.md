@@ -26,6 +26,7 @@
 - 后端：Go `1.22`
 - 桌面容器：Wails `v2`
 - 前端：React 18 + TypeScript + Vite
+- 可访问性原语：`@radix-ui/react-dialog` / `-popover` / `-radio-group`（无样式原语，不引入整框 UI 库）
 - 数据库：SQLite（`modernc.org/sqlite`）
 - Markdown 渲染：`marked` + `dompurify`
 
@@ -33,23 +34,32 @@
 
 ```text
 .
-├─ app.go                     # Wails 绑定方法
-├─ main.go                    # 桌面应用入口
+├─ app.go                      # Wails 绑定方法（前后端桥接层）
+├─ main.go                     # 桌面应用入口
 ├─ internal
-│  ├─ config                  # 本地配置管理
-│  └─ store                   # SQLite 访问与 Todo 仓储
+│  ├─ config                   # 本地配置管理（config.json）
+│  └─ store                    # SQLite 访问与 Todo/Group/Subitem 仓储
 ├─ frontend
 │  ├─ src
-│  │  ├─ lib                  # Wails 前端调用封装
-│  │  ├─ App.tsx              # 主界面与交互
-│  │  ├─ styles.css           # 样式
-│  │  └─ types.ts             # 前端类型定义
+│  │  ├─ App.tsx               # 顶层编排组件
+│  │  ├─ main.tsx              # React 挂载入口
+│  │  ├─ appMessages.ts        # 中英文文案 (i18n)
+│  │  ├─ appTypes.ts           # 通用字面量类型 (Locale / Tab / View)
+│  │  ├─ types.ts              # 与后端对齐的领域模型类型
+│  │  ├─ styles.css            # 全局样式
+│  │  ├─ lib                   # Wails 调用封装与纯函数工具 (wails/date/todos)
+│  │  ├─ hooks                 # 业务状态 hook (按职责拆分)
+│  │  └─ features              # 展示组件，按功能域拆分
+│  │     ├─ _primitives/        # Radix 原语语义封装 (Modal 等)
+│  │     ├─ calendar/          # 日历看板、日期选择
+│  │     ├─ settings/          # 设置弹窗
+│  │     └─ todos/             # 侧栏列表、详情面板、删除确认
 │  └─ package.json
 ├─ docs
-│  └─ usage.md                # 使用说明
+│  └─ usage.md                 # 使用说明
 ├─ build
-│  ├─ appicon.png             # 应用图标源文件
-│  └─ windows                 # Windows 打包资源
+│  ├─ appicon.png              # 应用图标源文件
+│  └─ windows                  # Windows 打包资源
 └─ wails.json
 ```
 

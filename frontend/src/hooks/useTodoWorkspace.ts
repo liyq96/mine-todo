@@ -190,11 +190,14 @@ export function useTodoWorkspace({
 
   async function handleToggleCompleted(todo: Todo) {
     try {
+      setSaving(true);
       const updated = await backend.toggleCompleted(todo.id);
       syncUpdatedTodo(updated, true);
       setError('');
     } catch (err) {
       setError(readError(err, unknownErrorText));
+    } finally {
+      setSaving(false);
     }
   }
 

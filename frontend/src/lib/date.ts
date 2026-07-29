@@ -1,5 +1,4 @@
 import type { Locale } from '../appTypes';
-import { messages } from '../appMessages';
 
 export function startOfDay(value: Date) {
   const copy = new Date(value);
@@ -77,7 +76,7 @@ export function monthCalendarCells(value: Date) {
 export function formatCreatedAt(
   value: string,
   locale: Locale,
-  copy: (typeof messages)[Locale],
+  copy: { createdAtUnknown: string; createdAt: (value: string) => string },
 ) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {

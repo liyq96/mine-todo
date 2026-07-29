@@ -1,3 +1,4 @@
+import { Modal } from '../_primitives/Modal';
 import type { Todo } from '../../types';
 
 type CalendarView = 'month' | 'week';
@@ -56,114 +57,108 @@ export function CalendarModal({
   onSelectDate,
   onOpenTodo,
 }: CalendarModalProps) {
-  if (!isOpen) {
-    return null;
-  }
-
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="calendar-modal" onClick={(event) => event.stopPropagation()}>
-        <div className="calendar-modal__header">
-          <div className="calendar-toolbar__title">
-            <h2>{copy.title}</h2>
+    <Modal open={isOpen} onClose={onClose} contentClassName="calendar-modal">
+      <div className="calendar-modal__header">
+        <div className="calendar-toolbar__title">
+          <h2>{copy.title}</h2>
+        </div>
+        <div className="calendar-toolbar__actions">
+          <div className="calendar-view-switch">
+            <button
+              type="button"
+              className={`calendar-view-switch__button ${view === 'month' ? 'is-active' : ''}`}
+              onClick={() => onViewChange('month')}
+            >
+              {copy.monthView}
+            </button>
+            <button
+              type="button"
+              className={`calendar-view-switch__button ${view === 'week' ? 'is-active' : ''}`}
+              onClick={() => onViewChange('week')}
+            >
+              {copy.weekView}
+            </button>
           </div>
-          <div className="calendar-toolbar__actions">
-            <div className="calendar-view-switch">
-              <button
-                type="button"
-                className={`calendar-view-switch__button ${view === 'month' ? 'is-active' : ''}`}
-                onClick={() => onViewChange('month')}
-              >
-                {copy.monthView}
-              </button>
-              <button
-                type="button"
-                className={`calendar-view-switch__button ${view === 'week' ? 'is-active' : ''}`}
-                onClick={() => onViewChange('week')}
-              >
-                {copy.weekView}
-              </button>
-            </div>
-            <button type="button" className="topbar-link" onClick={onPrevious} aria-label={copy.close}>
-              ‹
-            </button>
-            <button type="button" className="topbar-link" onClick={onToday}>
-              {copy.today}
-            </button>
-            <button type="button" className="topbar-link" onClick={onNext} aria-label={copy.close}>
-              ›
-            </button>
-            <button type="button" className="icon-button" onClick={onClose} aria-label={copy.close}>
-              ×
-            </button>
+          <button type="button" className="topbar-link" onClick={onPrevious} aria-label={copy.close}>
+            ‹
+          </button>
+          <button type="button" className="topbar-link" onClick={onToday}>
+            {copy.today}
+          </button>
+          <button type="button" className="topbar-link" onClick={onNext} aria-label={copy.close}>
+            ›
+          </button>
+          <button type="button" className="icon-button" onClick={onClose} aria-label={copy.close}>
+            ×
+          </button>
+        </div>
+      </div>
+
+      <section className="calendar-layout">
+        <div className="calendar-panel">
+          <div className="calendar-grid calendar-grid--header">
+            {weekdayLabels.map((label) => (
+              <div key={label} className="calendar-cell calendar-cell--header">
+                {label}
+              </div>
+            ))}
+          </div>
+
+          <div className={`calendar-grid calendar-grid--body ${view === 'month' ? 'is-month' : 'is-week'}`}>
+            {cells.map((cell) => {
+              if (cell.isBlank) {
+                return <div key={cell.key} className="calendar-cell calendar-cell--blank" />;
+              }
+
+              return (
+                <button
+                  key={cell.key}
+                  type="button"
+                  className={`calendar-cell calendar-cell--day ${cell.isToday ? 'is-today' : ''} ${cell.isSelected ? 'is-selected' : ''}`}
+                  onClick={() => onSelectDate(cell.key)}
+                >
+                  <div className="calendar-cell__daynum">{cell.dayNumber}</div>
+                  {cell.badgeCount ? (
+                    <span className={`calendar-cell__badge ${cell.hasPending ? 'is-danger' : 'is-success'}`}>
+                      {cell.badgeCount}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <section className="calendar-layout">
-          <div className="calendar-panel">
-            <div className="calendar-grid calendar-grid--header">
-              {weekdayLabels.map((label) => (
-                <div key={label} className="calendar-cell calendar-cell--header">
-                  {label}
-                </div>
-              ))}
-            </div>
-
-            <div className={`calendar-grid calendar-grid--body ${view === 'month' ? 'is-month' : 'is-week'}`}>
-              {cells.map((cell) => {
-                if (cell.isBlank) {
-                  return <div key={cell.key} className="calendar-cell calendar-cell--blank" />;
-                }
-
-                return (
-                  <button
-                    key={cell.key}
-                    type="button"
-                    className={`calendar-cell calendar-cell--day ${cell.isToday ? 'is-today' : ''} ${cell.isSelected ? 'is-selected' : ''}`}
-                    onClick={() => onSelectDate(cell.key)}
-                  >
-                    <div className="calendar-cell__daynum">{cell.dayNumber}</div>
-                    {cell.badgeCount ? (
-                      <span className={`calendar-cell__badge ${cell.hasPending ? 'is-danger' : 'is-success'}`}>
-                        {cell.badgeCount}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
+        <div className="calendar-agenda">
+          <div className="calendar-agenda__header">
+            <h3>{selectedDateTitle}</h3>
           </div>
 
-          <div className="calendar-agenda">
-            <div className="calendar-agenda__header">
-              <h3>{selectedDateTitle}</h3>
-            </div>
+          <div className={`calendar-agenda__list ${selectedDateTodos.length === 0 ? 'is-empty' : ''}`}>
+            {selectedDateTodos.length === 0 ? <p className="calendar-empty">{copy.noScheduledTodos}</p> : null}
 
-            <div className={`calendar-agenda__list ${selectedDateTodos.length === 0 ? 'is-empty' : ''}`}>
-              {selectedDateTodos.length === 0 ? <p className="calendar-empty">{copy.noScheduledTodos}</p> : null}
-
-              {selectedDateTodos.map((todo) => (
-                <div
-                  key={todo.id}
-                  className={`calendar-agenda__item ${todo.isCompleted ? 'is-completed' : ''}`}
+            {selectedDateTodos.map((todo) => (
+              <div
+                key={todo.id}
+                className={`calendar-agenda__item ${todo.isCompleted ? 'is-completed' : ''}`}
+              >
+                <span className={`calendar-agenda__status ${todo.isCompleted ? 'is-completed' : ''}`} />
+                <button
+                  type="button"
+                  className="calendar-agenda__content-button"
+                  onClick={() => onOpenTodo(todo)}
                 >
-                  <span className={`calendar-agenda__status ${todo.isCompleted ? 'is-completed' : ''}`} />
-                  <button
-                    type="button"
-                    className="calendar-agenda__content-button"
-                    onClick={() => onOpenTodo(todo)}
-                  >
-                    <span className="calendar-agenda__content">
-                      <strong>{todo.title || copy.untitledTodo}</strong>
-                      <span>{todo.summary || copy.noSummary}</span>
-                    </span>
-                  </button>
-                </div>
-              ))}
-            </div>
+                  <span className="calendar-agenda__content">
+                    <strong>{todo.title || copy.untitledTodo}</strong>
+                    <span>{todo.summary || copy.noSummary}</span>
+                  </span>
+                </button>
+              </div>
+            ))}
           </div>
-        </section>
-      </div>
-    </div>
+        </div>
+      </section>
+    </Modal>
   );
 }

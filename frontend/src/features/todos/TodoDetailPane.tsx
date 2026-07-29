@@ -1,10 +1,8 @@
 import { IconChevronDown, IconFolder, IconPlus, IconX } from '@tabler/icons-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import * as Popover from '@radix-ui/react-popover';
+import { useMemo } from 'react';
+import type { PendingSubitem, SaveStatus } from '../../appTypes';
 import type { Todo, TodoDraft, TodoGroup, TodoSubitem } from '../../types';
-
-type PendingSubitem = { id: string; content: string };
-
-type SaveStatus = 'saved' | 'typing' | 'saving' | 'failed';
 
 type DetailCopy = {
   blankTitle: string;
@@ -104,38 +102,10 @@ export function TodoDetailPane({
   formattedDraftDueDate,
   formattedSelectedDueDate,
 }: TodoDetailPaneProps) {
-  const [isGroupPickerOpen, setIsGroupPickerOpen] = useState(false);
-  const groupPickerRef = useRef<HTMLDivElement | null>(null);
-
   const activeGroupName = useMemo(
     () => groups.find((group) => group.id === draft.groupId)?.name ?? selectedGroupName,
     [draft.groupId, groups, selectedGroupName],
   );
-
-  useEffect(() => {
-    if (!isGroupPickerOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!groupPickerRef.current?.contains(event.target as Node)) {
-        setIsGroupPickerOpen(false);
-      }
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setIsGroupPickerOpen(false);
-      }
-    }
-
-    window.addEventListener('mousedown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('mousedown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isGroupPickerOpen]);
 
   return (
     <main className="detail-panel">
@@ -185,40 +155,37 @@ export function TodoDetailPane({
                 />
                 <div className="detail-date-field">
                   <span>{copy.groupLabel}</span>
-                  <div ref={groupPickerRef} className="detail-select-wrap">
-                    <button
-                      type="button"
-                      className={`detail-group-picker ${isGroupPickerOpen ? 'is-open' : ''}`}
-                      onClick={() => setIsGroupPickerOpen((current) => !current)}
-                    >
-                      <span className="detail-group-picker__value">
-                        <IconFolder size={15} stroke={2} />
-                        <strong>{activeGroupName}</strong>
-                      </span>
-                      <span className="detail-group-picker__icon">
-                        <IconChevronDown size={14} stroke={2} />
-                      </span>
-                    </button>
-                    {isGroupPickerOpen ? (
-                      <div className="detail-group-menu">
-                        {groups.map((group) => (
-                          <button
-                            key={group.id}
-                            type="button"
-                            className={`detail-group-menu__item ${draft.groupId === group.id ? 'is-active' : ''}`}
-                            onClick={() => {
-                              onDraftGroupChange(group.id);
-                              setIsGroupPickerOpen(false);
-                            }}
-                          >
-                            <span className="detail-group-menu__item-icon">
-                              <IconFolder size={14} stroke={2} />
-                            </span>
-                            <span>{group.name}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
+                  <div className="detail-select-wrap">
+                    <Popover.Root>
+                      <Popover.Trigger asChild>
+                        <button type="button" className="detail-group-picker">
+                          <span className="detail-group-picker__value">
+                            <IconFolder size={15} stroke={2} />
+                            <strong>{activeGroupName}</strong>
+                          </span>
+                          <span className="detail-group-picker__icon">
+                            <IconChevronDown size={14} stroke={2} />
+                          </span>
+                        </button>
+                      </Popover.Trigger>
+                      <Popover.Portal>
+                        <Popover.Content className="detail-group-menu" align="start" sideOffset={6}>
+                          {groups.map((group) => (
+                            <button
+                              key={group.id}
+                              type="button"
+                              className={`detail-group-menu__item ${draft.groupId === group.id ? 'is-active' : ''}`}
+                              onClick={() => onDraftGroupChange(group.id)}
+                            >
+                              <span className="detail-group-menu__item-icon">
+                                <IconFolder size={14} stroke={2} />
+                              </span>
+                              <span>{group.name}</span>
+                            </button>
+                          ))}
+                        </Popover.Content>
+                      </Popover.Portal>
+                    </Popover.Root>
                   </div>
                 </div>
                 <div className="detail-date-field">
@@ -304,16 +271,18 @@ export function TodoDetailPane({
                     const isEditingSubitem = editingSubitemId === subitem.id;
 
                     return (
-                      <label
+                      <div
                         key={subitem.id}
                         className={`subitem-row is-editing ${isSelected ? 'is-selected' : ''} ${subitem.isCompleted ? 'is-completed' : ''}`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => onToggleSubitemSelection(subitem.id)}
-                        />
-                        <span className="subitem-checkbox">{isSelected ? '✓' : ''}</span>
+                        <label className="subitem-select">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => onToggleSubitemSelection(subitem.id)}
+                          />
+                          <span className="subitem-checkbox">{isSelected ? '✓' : ''}</span>
+                        </label>
                         {isEditingSubitem ? (
                           <input
                             className="subitem-input"
@@ -335,15 +304,12 @@ export function TodoDetailPane({
                           <button
                             type="button"
                             className="subitem-content-button"
-                            onClick={(event) => {
-                              event.preventDefault();
-                              onStartEditingSubitem(subitem);
-                            }}
+                            onClick={() => onStartEditingSubitem(subitem)}
                           >
                             <span className="subitem-content">{subitem.content}</span>
                           </button>
                         )}
-                      </label>
+                      </div>
                     );
                   })}
 

@@ -38,10 +38,8 @@ function appBinding() {
 
 export const backend = {
   getBootstrap: () => appBinding().GetBootstrap(),
-  listGroups: () => appBinding().ListGroups(),
   updateGroup: (payload: { id: string; name: string }) => appBinding().UpdateGroup(payload),
   deleteGroup: (payload: { id: string; deleteTodos: boolean }) => appBinding().DeleteGroup(payload),
-  listTodos: () => appBinding().ListTodos(),
   createGroup: (payload: { name: string }) => appBinding().CreateGroup(payload),
   createTodo: (payload: Partial<TodoDraft>) => appBinding().CreateTodo(payload),
   updateTodo: (payload: Partial<TodoDraft> & { id: string }) => appBinding().UpdateTodo(payload),

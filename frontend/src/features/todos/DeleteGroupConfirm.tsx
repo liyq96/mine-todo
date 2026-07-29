@@ -1,3 +1,5 @@
+import { Modal } from '../_primitives/Modal';
+
 type DeleteGroupConfirmProps = {
   isOpen: boolean;
   title: string;
@@ -27,50 +29,44 @@ export function DeleteGroupConfirm({
   onClose,
   onConfirm,
 }: DeleteGroupConfirmProps) {
-  if (!isOpen) {
-    return null;
-  }
-
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="settings-confirm-card delete-confirm-card" onClick={(event) => event.stopPropagation()}>
-        <div className="settings-pane__header">
-          <h3>{title}</h3>
-          <p>{description}</p>
-        </div>
-
-        <label className="delete-group-option">
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={(event) => onCheckedChange(event.target.checked)}
-            disabled={saving}
-          />
-          <span className="delete-group-option__copy">
-            <strong>{checkboxLabel}</strong>
-            <span>{hint}</span>
-          </span>
-        </label>
-
-        <div className="settings-actions delete-confirm-actions">
-          <button
-            type="button"
-            className="dialog-button dialog-button--secondary"
-            onClick={onClose}
-            disabled={saving}
-          >
-            {cancelLabel}
-          </button>
-          <button
-            type="button"
-            className="dialog-button dialog-button--danger"
-            onClick={onConfirm}
-            disabled={saving}
-          >
-            {confirmLabel}
-          </button>
-        </div>
+    <Modal open={isOpen} onClose={onClose} contentClassName="settings-confirm-card delete-confirm-card">
+      <div className="settings-pane__header">
+        <h3>{title}</h3>
+        <p>{description}</p>
       </div>
-    </div>
+
+      <label className="delete-group-option">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onCheckedChange(event.target.checked)}
+          disabled={saving}
+        />
+        <span className="delete-group-option__copy">
+          <strong>{checkboxLabel}</strong>
+          <span>{hint}</span>
+        </span>
+      </label>
+
+      <div className="settings-actions delete-confirm-actions">
+        <button
+          type="button"
+          className="dialog-button dialog-button--secondary"
+          onClick={onClose}
+          disabled={saving}
+        >
+          {cancelLabel}
+        </button>
+        <button
+          type="button"
+          className="dialog-button dialog-button--danger"
+          onClick={onConfirm}
+          disabled={saving}
+        >
+          {confirmLabel}
+        </button>
+      </div>
+    </Modal>
   );
 }
