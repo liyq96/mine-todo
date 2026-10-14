@@ -14,6 +14,14 @@ export interface TodoGroup {
   updatedAt: string;
 }
 
+export interface Note {
+  id: string;
+  title: string;
+  contentMarkdown: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Todo {
   id: string;
   groupId: string;
@@ -37,6 +45,7 @@ export interface BootstrapResponse {
   config: AppConfig;
   groups: TodoGroup[];
   todos: Todo[];
+  notes: Note[];
 }
 
 export interface TodoDraft {
@@ -47,4 +56,9 @@ export interface TodoDraft {
   isCompleted: boolean;
   dueDate: string;
   subitems: TodoSubitem[];
+}
+
+export interface NoteDraft {
+  title: string;
+  contentMarkdown: string;
 }

@@ -4,3 +4,4 @@ export type SaveStatus = 'saved' | 'typing' | 'saving' | 'failed';
 export type DirectorySwitchMode = 'copy' | 'fresh';
 export type PendingSubitem = { id: string; content: string };
 export type CalendarView = 'month' | 'week';
+export type WorkspaceMode = 'todos' | 'notes';

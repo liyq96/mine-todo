@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { emptyDraft, fromTodo, readError, sortTodos } from '../lib/todos';
 import { backend } from '../lib/wails';
-import type { BootstrapResponse, AppConfig, Todo, TodoDraft, TodoGroup } from '../types';
+import type { BootstrapResponse, AppConfig, Note, Todo, TodoDraft, TodoGroup } from '../types';
 
 type UseTodoWorkspaceArgs = {
   unknownErrorText: string;
@@ -17,6 +17,7 @@ export function useTodoWorkspace({
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [groups, setGroups] = useState<TodoGroup[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TodoDraft>(emptyDraft);
@@ -51,6 +52,7 @@ export function useTodoWorkspace({
     setConfig(data.config);
     setGroups(data.groups);
     setTodos(data.todos);
+    setNotes(data.notes);
 
     const first = data.todos[0] ?? null;
     if (!first) {
@@ -205,6 +207,7 @@ export function useTodoWorkspace({
     config,
     groups,
     todos,
+    notes,
     selectedId,
     activeGroupId,
     draft,
@@ -214,6 +217,7 @@ export function useTodoWorkspace({
     isDeleteConfirmOpen,
     selectedTodo,
     setGroups,
+    setNotes,
     setDraft,
     setQuickTitle,
     setIsEditing,

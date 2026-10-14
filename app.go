@@ -54,10 +54,21 @@ func (a *App) GetBootstrap() (*BootstrapResponse, error) {
 		return nil, err
 	}
 
+	notes, err := a.storeManager.ListNotes()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := a.configManager.Current
 	cfg := a.configManager.Current()
 	return &BootstrapResponse{
 		Config: *cfg,
 		Groups: groups,
+,
+	}, nil
+}
+
+fun
 		Todos:  todos,
 	}, nil
 }
@@ -65,6 +76,44 @@ func (a *App) GetBootstrap() (*BootstrapResponse, error) {
 func (a *App) ListGroups() ([]store.Group, error) {
 	return a.storeManager.ListGroups()
 }
+ore.Todo, error) {
+	return a.storeManager.ListTodos()
+}
+
+func (a *App) ListNotes() ([]store.Note, error) {
+	return a.storeManager.ListNotes()
+}
+
+func (a *App) CreateNote(input store.CreateNoteInput) (*store.Note, error) {
+	input.Title = strings.TrimSpace(input.Title)
+	if input.Title == "" {
+		return nil, errors.New("note title is required")
+	}
+	return a.storeManager.CreateNote(input)
+}
+
+func (a *App) UpdateNote(input store.UpdateNoteInput) (*store.Note, error) {
+	input.ID = strings.TrimSpace(input.ID)
+	input.Title = strings.TrimSpace(input.Title)
+	if input.ID == "" {
+		return nil, errors.New("note id is required")
+	}
+	if input.Title == "" {
+		return nil, errors.New("note title is required")
+	}
+	return a.storeManager.UpdateNote(input)
+}
+
+func (a *App) DeleteNote(id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return errors.New("note id is required")
+	}
+	return a.storeManager.DeleteNote(id)
+}
+
+func (a *App) CreateTodo(input store.CreateTodoInput) (*store.Todo, error) {
+	input.GroupID = strings.TrimSpace(
 
 func (a *App) ListTodos() ([]store.Todo, error) {
 	return a.storeManager.ListTodos()
@@ -192,44 +241,15 @@ func (a *App) UpdateStorageDirectory(path string, copyData bool) (*BootstrapResp
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil, errors.New("storage directory is required")
-	}
-
-	cfg, err := a.configManager.UpdateStorageDir(path, copyData)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := a.storeManager.Switch(cfg); err != nil {
-		return nil, err
-	}
-
-	groups, err := a.storeManager.ListGroups()
-	if err != nil {
-		return nil, err
-	}
+	return a.GetBootstrap()
 
 	todos, err := a.storeManager.ListTodos()
 	if err != nil {
-		return nil, err
-	}
-
-	return &BootstrapResponse{
-		Config: *cfg,
-		Groups: groups,
-		Todos:  todos,
-	}, nil
-}
-
-func (a *App) UpdateLanguage(language string) (*BootstrapResponse, error) {
+	_, err := a.configManager.UpdateLanguage(language)
 	cfg, err := a.configManager.UpdateLanguage(language)
 	if err != nil {
 		return nil, err
-	}
-
-	groups, err := a.storeManager.ListGroups()
-	if err != nil {
-		return nil, err
-	}
+	return a.GetBootstrap()
 
 	todos, err := a.storeManager.ListTodos()
 	if err != nil {
@@ -253,6 +273,8 @@ func (a *App) SelectStorageDirectory() (string, error) {
 		Title:            "Select Data Directory",
 		DefaultDirectory: current.StorageDir,
 	})
+on:"todos"`
+	Not
 	if err != nil {
 		return "", err
 	}

@@ -37,6 +37,15 @@ type Group struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+type Note struct {
+	ID              string    `json:"id"`
+	Title           string    `json:"title"`
+	ContentMarkdown string    `json:"contentMarkdown"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+}
+
+type Subitem struc
 type Subitem struct {
 	ID          string    `json:"id"`
 	TodoID      string    `json:"todoId"`
@@ -98,6 +107,15 @@ type DeleteGroupInput struct {
 	ID          string `json:"id"`
 	DeleteTodos bool   `json:"deleteTodos"`
 }
+ut struct {
+	Title           string `json:"title"`
+	ContentMarkdown string `json:"contentMarkdown"`
+}
+
+type UpdateNoteInput struct {
+	ID              string `json:"id"`
+	Title           string `json:"title"`
+	ContentMarkdow
 
 func NewManager(cfg *config.AppConfig) (*Manager, error) {
 	db, err := openDB(cfg.DBPath)
@@ -197,6 +215,97 @@ func (m *Manager) ListGroups() ([]Group, error) {
 }
 
 func (m *Manager) CreateTodo(input CreateTodoInput) (*Todo, error) {
+ote, error) {
+	rows, err := m.db.Query(`
+		SELECT id, title, content_markdown, created_at, updated_at
+		FROM notes
+		ORDER BY updated_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query notes: %w", err)
+	}
+	defer rows.Close()
+
+	notes := make([]Note, 0)
+	for rows.Next() {
+		var note Note
+		if err := rows.Scan(
+			&note.ID,
+			&note.Title,
+			&note.ContentMarkdown,
+			&note.CreatedAt,
+			&note.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan note: %w", err)
+		}
+		notes = append(notes, note)
+	}
+
+	return notes, rows.Err()
+}
+
+func (m *Manager) CreateNote(input CreateNoteInput) (*Note, error) {
+	now := time.Now()
+	id := fmt.Sprintf("note-%d", now.UnixNano())
+	if _, err := m.db.Exec(`
+		INSERT INTO notes (id, title, content_markdown, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, id, input.Title, normalizeMarkdown(input.ContentMarkdown), now, now); err != nil {
+		return nil, fmt.Errorf("insert note: %w", err)
+	}
+
+	return m.findNoteByID(id)
+}
+
+func (m *Manager) UpdateNote(input UpdateNoteInput) (*Note, error) {
+	result, err := m.db.Exec(`
+		UPDATE notes
+		SET title = ?, content_markdown = ?, updated_at = ?
+		WHERE id = ?
+	`, input.Title, normalizeMarkdown(input.ContentMarkdown), time.Now(), input.ID)
+	if err != nil {
+		return nil, fmt.Errorf("update note: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if rows == 0 {
+		return nil, errors.New("note not found")
+	}
+
+	return m.findNoteByID(input.ID)
+}
+
+func (m *Manager) DeleteNote(id string) error {
+	result, err := m.db.Exec(`DELETE FROM notes WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete note: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return errors.New("note not found")
+	}
+	return nil
+}
+
+func (m *Manager) CreateTodo(input CreateTodoInput) (*Todo, error) {
+	now := time.Now()
+	id := fmt.Sprintf("%d", now.UnixNano())
+	markdown := normalizeMarkdown(input.DetailMarkdown)
+	dueDate := normalizeDateString(input.DueDate)
+	groupID, err := m.resolveGroupID(input.GroupID)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = m.db.Exec(`
+		INSERT INTO todos (id, group_id, title, 
 	now := time.Now()
 	id := fmt.Sprintf("%d", now.UnixNano())
 	markdown := normalizeMarkdown(input.DetailMarkdown)
@@ -644,8 +753,54 @@ func openDB(path string) (*sql.DB, error) {
 		)
 	`); err != nil {
 		_ = db.Close()
+db.Exec(`
+		CREATE TABLE IF NOT EXISTS notes (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			content_markdown TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMP NOT NULL,
+			updated_at TIMESTAMP NOT NULL
+		)
+	`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create notes table: %w", err)
+	}
+
+	if _, err := db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_notes_updated_at
+		ON notes (updated_at DESC)
+	`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create notes index: %w", err)
+	}
+
+	ret
 		return nil, fmt.Errorf("create todo_subitems table: %w", err)
 	}
+or) {
+	var note Note
+	err := m.db.QueryRow(`
+		SELECT id, title, content_markdown, created_at, updated_at
+		FROM notes
+		WHERE id = ?
+	`, id).Scan(
+		&note.ID,
+		&note.Title,
+		&note.ContentMarkdown,
+		&note.CreatedAt,
+		&note.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("note not found")
+		}
+		return nil, fmt.Errorf("query note: %w", err)
+	}
+	return &note, nil
+}
+
+func (m *Manager) findGroupByID(id string) (*Group, error) {
+	var group Gr
 
 	if _, err := db.Exec(`
 		CREATE INDEX IF NOT EXISTS idx_todo_subitems_todo_created_at

@@ -2,9 +2,10 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { useMemo, useState } from 'react';
 import { APP_INFO, messages } from './appMessages';
-import type { Locale } from './appTypes';
+import type { Locale, WorkspaceMode } from './appTypes';
 import { CalendarModal } from './features/calendar/CalendarModal';
 import { DueDatePickerModal } from './features/calendar/DueDatePickerModal';
+import { NoteEditorPane } from './features/notes/NoteEditorPane';
 import { SettingsModal } from './features/settings/SettingsModal';
 import { DeleteGroupConfirm } from './features/todos/DeleteGroupConfirm';
 import { DeleteTodoConfirm } from './features/todos/DeleteTodoConfirm';
@@ -13,6 +14,7 @@ import { TodoSidebar } from './features/todos/TodoSidebar';
 import { useSubitemEditor } from './hooks/useSubitemEditor';
 import { useTodoAutosave } from './hooks/useTodoAutosave';
 import { useCalendarState } from './hooks/useCalendarState';
+import { useNoteWorkspace } from './hooks/useNoteWorkspace';
 import { useSettingsController } from './hooks/useSettingsController';
 import { useTodoScrollSync } from './hooks/useTodoScrollSync';
 import { useTodoWorkspace } from './hooks/useTodoWorkspace';
@@ -22,6 +24,8 @@ import type { Todo, TodoGroup } from './types';
 function App() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('todos');
+  const [isDeleteNoteConfirmOpen, setIsDeleteNoteConfirmOpen] = useState(false);
   const [groupPendingDelete, setGroupPendingDelete] = useState<TodoGroup | null>(null);
   const [deleteGroupTodos, setDeleteGroupTodos] = useState(false);
 
@@ -29,6 +33,7 @@ function App() {
     config,
     groups,
     todos,
+    notes,
     selectedId,
     activeGroupId,
     draft,
@@ -38,6 +43,7 @@ function App() {
     isDeleteConfirmOpen,
     selectedTodo,
     setDraft,
+    setNotes,
     setQuickTitle,
     setIsEditing,
     setIsDeleteConfirmOpen,
@@ -59,6 +65,31 @@ function App() {
 
   const locale: Locale = config?.language ?? 'zh-CN';
   const copy = messages[locale];
+
+  const {
+    selectedNote,
+    selectedNoteId,
+    noteDraft,
+    noteSaveStatus,
+    isNotePreview,
+    setNoteDraft,
+    setIsNotePreview,
+    selectNote,
+    createNote,
+    deleteNote,
+  } = useNoteWorkspace({
+    notes,
+    setNotes,
+    untitledNote: copy.untitledNote as string,
+    unknownErrorText: copy.unknownError as string,
+    setSaving,
+    setError,
+  });
+
+  const notePreviewHTML = useMemo(() => {
+    const html = marked.parse(noteDraft.contentMarkdown || '', { breaks: true }) as string;
+    return DOMPurify.sanitize(html);
+  }, [noteDraft.contentMarkdown]);
 
   const selectedGroupName =
     groups.find((group) => group.id === (isEditing ? draft.groupId : selectedTodo?.groupId))?.name ??
@@ -244,10 +275,14 @@ function App() {
     <>
       <div className="shell">
         <TodoSidebar
+          mode={workspaceMode}
           remainingCountText={copy.remainingCount(todos.filter((item) => !item.isCompleted).length)}
           totalCountText={copy.totalCount(todos.length)}
+          noteCountText={copy.noteCount(notes.length)}
           copy={{
             setting: copy.setting,
+            todoTab: copy.workspaceTabs.todos,
+            noteTab: copy.workspaceTabs.notes,
             quickAddPlaceholder: copy.quickAddPlaceholder,
             calendarEntryTitle: copy.calendarEntryTitle,
             calendarEntryDescription: copy.calendarEntryDescription,
@@ -262,6 +297,11 @@ function App() {
             renameGroup: copy.sidebarGroup.renameGroup,
             deleteGroup: copy.sidebarGroup.deleteGroup,
             defaultGroupName: copy.sidebarGroup.defaultGroupName,
+            notesTitle: copy.notesTitle,
+            newNote: copy.newNote,
+            emptyNotes: copy.emptyNotes,
+            untitledNote: copy.untitledNote,
+            emptyNotePreview: copy.emptyNotePreview,
           }}
           quickTitle={quickTitle}
           isCalendarOpen={isCalendarOpen}
@@ -269,14 +309,19 @@ function App() {
           saving={saving}
           groups={groups}
           todos={todos}
+          notes={notes}
           selectedId={selectedId}
+          selectedNoteId={selectedNoteId}
           activeGroupId={activeGroupId}
+          onModeChange={setWorkspaceMode}
           onOpenSettings={() => openSettings('data')}
           onQuickTitleChange={setQuickTitle}
           onQuickCreate={() => void handleCreateNewTodo()}
           onOpenCalendarBoard={openCalendarBoard}
           onRegisterTodoRef={registerTodoRef}
           onSelectTodo={handleSelectTodo}
+          onSelectNote={(note) => void selectNote(note)}
+          onCreateNote={() => void createNote()}
           onSelectGroup={selectGroup}
           onToggleCompleted={(todo) => void handleTodoCompletedToggle(todo)}
           onCreateGroup={(name) => void handleCreateGroup(name)}
@@ -284,7 +329,7 @@ function App() {
           onRequestDeleteGroup={requestDeleteGroup}
         />
 
-        <TodoDetailPane
+        {workspaceMode === 'todos' ? <TodoDetailPane
           error={error}
           selectedTodo={selectedTodo}
           copy={{
@@ -341,7 +386,35 @@ function App() {
           onToggleSubitemCompleted={(subitem) => void handleToggleSubitemCompleted(subitem)}
           formattedDraftDueDate={draft.dueDate ? formatDueDate(draft.dueDate, locale) : copy.dueDateNone}
           formattedSelectedDueDate={selectedTodo?.dueDate ? formatDueDate(selectedTodo.dueDate, locale) : copy.dueDateNone}
-        />
+        /> : (
+          <NoteEditorPane
+            error={error}
+            selectedNote={selectedNote}
+            draft={noteDraft}
+            saveStatus={noteSaveStatus}
+            isPreview={isNotePreview}
+            saving={saving}
+            previewHTML={notePreviewHTML}
+            locale={locale}
+            copy={{
+              blankTitle: copy.noteBlankTitle,
+              blankDescription: copy.noteBlankDescription,
+              createNote: copy.newNote,
+              titlePlaceholder: copy.noteTitlePlaceholder,
+              contentPlaceholder: copy.noteContentPlaceholder,
+              editMode: copy.editNote,
+              previewMode: copy.previewNote,
+              deleteNote: copy.deleteNote,
+              characterCount: copy.noteCharacterCount,
+              updatedAt: copy.noteUpdatedAt,
+              saveStatus: copy.saveStatus,
+            }}
+            onDraftChange={setNoteDraft}
+            onPreviewChange={setIsNotePreview}
+            onCreateNote={() => void createNote()}
+            onRequestDelete={() => setIsDeleteNoteConfirmOpen(true)}
+          />
+        )}
       </div>
 
       <SettingsModal
@@ -398,6 +471,21 @@ function App() {
         saving={saving}
         onClose={() => setIsDeleteConfirmOpen(false)}
         onConfirm={() => void handleConfirmDeleteTodo()}
+      />
+
+      <DeleteTodoConfirm
+        isOpen={isDeleteNoteConfirmOpen}
+        title={copy.confirmDeleteNoteTitle}
+        description={copy.confirmDeleteNoteDescription}
+        cancelLabel={copy.cancel}
+        confirmLabel={copy.confirmDeleteNoteAction}
+        saving={saving}
+        onClose={() => setIsDeleteNoteConfirmOpen(false)}
+        onConfirm={() => {
+          void deleteNote().then((deleted) => {
+            if (deleted) setIsDeleteNoteConfirmOpen(false);
+          });
+        }}
       />
 
       <DeleteGroupConfirm
