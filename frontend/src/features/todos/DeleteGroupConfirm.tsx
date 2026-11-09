@@ -30,7 +30,7 @@ export function DeleteGroupConfirm({
   onConfirm,
 }: DeleteGroupConfirmProps) {
   return (
-    <Modal open={isOpen} onClose={onClose} contentClassName="settings-confirm-card delete-confirm-card">
+    <Modal title={title} open={isOpen} onClose={onClose} contentClassName="settings-confirm-card delete-confirm-card">
       <div className="settings-pane__header">
         <h3>{title}</h3>
         <p>{description}</p>

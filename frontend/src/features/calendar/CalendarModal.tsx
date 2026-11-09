@@ -58,7 +58,7 @@ export function CalendarModal({
   onOpenTodo,
 }: CalendarModalProps) {
   return (
-    <Modal open={isOpen} onClose={onClose} contentClassName="calendar-modal">
+    <Modal title={copy.title} open={isOpen} onClose={onClose} contentClassName="calendar-modal">
       <div className="calendar-modal__header">
         <div className="calendar-toolbar__title">
           <h2>{copy.title}</h2>

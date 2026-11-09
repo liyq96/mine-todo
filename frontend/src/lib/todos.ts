@@ -8,6 +8,12 @@ export const emptyDraft = (): TodoDraft => ({
   detailMarkdown: '',
   isCompleted: false,
   dueDate: '',
+  priority: 'q4',
+  reminderAt: '',
+  tags: [],
+  noteIds: [],
+  isFavorite: false,
+  isArchived: false,
   subitems: [],
 });
 
@@ -17,8 +23,13 @@ export function persistableDraft(draft: TodoDraft) {
     title: draft.title,
     summary: draft.summary,
     detailMarkdown: draft.detailMarkdown,
-    isCompleted: draft.isCompleted,
     dueDate: draft.dueDate,
+    priority: draft.priority,
+    reminderAt: draft.reminderAt,
+    tags: draft.tags,
+    noteIds: draft.noteIds,
+    isFavorite: draft.isFavorite,
+    isArchived: draft.isArchived,
   };
 }
 
@@ -37,6 +48,12 @@ export function fromTodo(todo: Todo): TodoDraft {
     detailMarkdown: todo.detailMarkdown,
     isCompleted: todo.isCompleted,
     dueDate: todo.dueDate ? todo.dueDate.slice(0, 10) : '',
+    priority: todo.priority,
+    reminderAt: todo.reminderAt,
+    tags: todo.tags,
+    noteIds: todo.noteIds,
+    isFavorite: todo.isFavorite,
+    isArchived: todo.isArchived,
     subitems: todo.subitems,
   };
 }
@@ -48,6 +65,7 @@ export function sortTodos(items: Todo[]) {
 }
 
 export function readError(err: unknown, fallback: string) {
+  if (typeof err === 'string' && err.trim()) return err;
   if (err instanceof Error) {
     return err.message;
   }

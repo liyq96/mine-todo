@@ -1,7 +1,9 @@
 export type Locale = 'zh-CN' | 'en-US';
-export type SettingsTab = 'data' | 'language' | 'about';
+export type SettingsTab = 'data' | 'language' | 'shortcuts' | 'about';
 export type SaveStatus = 'saved' | 'typing' | 'saving' | 'failed';
 export type DirectorySwitchMode = 'copy' | 'fresh';
 export type PendingSubitem = { id: string; content: string };
 export type CalendarView = 'month' | 'week';
 export type WorkspaceMode = 'todos' | 'notes';
+export type TodoSmartView = 'all' | 'today' | 'upcoming' | 'overdue' | 'no-date' | 'completed' | 'archived';
+export type NoteFilter = 'active' | 'favorites' | 'archived';

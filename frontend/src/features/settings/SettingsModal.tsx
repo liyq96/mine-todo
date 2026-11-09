@@ -1,5 +1,5 @@
 import { IconFolderOpen, IconX } from '@tabler/icons-react';
-import * as RadioGroup from '@radix-ui/react-radio-group';
+import { RadioOptions } from '../_primitives/RadioOptions';
 import { Modal } from '../_primitives/Modal';
 import type { Locale, SettingsTab } from '../../appTypes';
 import type { AppConfig } from '../../types';
@@ -17,6 +17,12 @@ type SettingsCopy = {
   languageTitle: string;
   languageDescription: string;
   languageLabel: string;
+  shortcutsTitle: string;
+  shortcutsDescription: string;
+  shortcutGroups: Array<{
+    title: string;
+    items: Array<{ label: string; keys: string[] }>;
+  }>;
   aboutTitle: string;
   aboutDescription: string;
   projectName: string;
@@ -39,6 +45,7 @@ type AppInfo = {
 };
 
 type SettingsModalProps = {
+  error: string;
   isOpen: boolean;
   copy: SettingsCopy;
   locale: Locale;
@@ -58,6 +65,7 @@ type SettingsModalProps = {
 };
 
 export function SettingsModal({
+  error,
   isOpen,
   copy,
   locale,
@@ -76,7 +84,7 @@ export function SettingsModal({
   onConfirmStorageDir,
 }: SettingsModalProps) {
   return (
-    <Modal open={isOpen} onClose={onClose} contentClassName="settings-modal">
+    <Modal title={copy.settingsTitle} open={isOpen} onClose={onClose} contentClassName="settings-modal">
       <div className="settings-modal__header">
         <h2>{copy.settingsTitle}</h2>
         <button type="button" className="icon-button" onClick={onClose} aria-label={copy.close}>
@@ -85,7 +93,7 @@ export function SettingsModal({
       </div>
 
       <div className="settings-tabs">
-        {(['data', 'language', 'about'] as SettingsTab[]).map((tab) => (
+        {(['data', 'language', 'shortcuts', 'about'] as SettingsTab[]).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -98,6 +106,7 @@ export function SettingsModal({
       </div>
 
       <div className="settings-panel">
+        {error && !isDirectoryConfirmOpen ? <div className="error-banner" role="alert">{error}</div> : null}
         {settingsTab === 'data' ? (
           <section className="settings-pane">
             <div className="settings-pane__header">
@@ -145,26 +154,39 @@ export function SettingsModal({
               <h3>{copy.languageTitle}</h3>
               <p>{copy.languageDescription}</p>
             </div>
-            <RadioGroup.Root
-              className="language-options"
-              role="radiogroup"
-              aria-label={copy.languageLabel}
+            <RadioOptions
+              label={copy.languageLabel}
               value={locale}
-              onValueChange={(value) => onChangeLanguage(value as Locale)}
               disabled={saving}
-            >
-              {(['zh-CN', 'en-US'] as Locale[]).map((language) => (
-                <label key={language} className={`language-option ${locale === language ? 'is-active' : ''}`}>
-                  <RadioGroup.Item value={language} className="language-option__radio" disabled={saving}>
-                    <RadioGroup.Indicator className="language-option__indicator" />
-                  </RadioGroup.Item>
-                  <span className="language-option__copy">
-                    <strong>{copy.languageOptions[language].label}</strong>
-                    <span>{copy.languageOptions[language].hint}</span>
-                  </span>
-                </label>
+              onChange={onChangeLanguage}
+              options={(['zh-CN', 'en-US'] as Locale[]).map((language) => ({ value: language, ...copy.languageOptions[language] }))}
+            />
+          </section>
+        ) : null}
+
+        {settingsTab === 'shortcuts' ? (
+          <section className="settings-pane">
+            <div className="settings-pane__header">
+              <h3>{copy.shortcutsTitle}</h3>
+              <p>{copy.shortcutsDescription}</p>
+            </div>
+            <div className="shortcut-groups">
+              {copy.shortcutGroups.map((group) => (
+                <section key={group.title} className="shortcut-group">
+                  <h4>{group.title}</h4>
+                  <div className="shortcut-list">
+                    {group.items.map((item) => (
+                      <div key={item.label} className="shortcut-row">
+                        <span>{item.label}</span>
+                        <span className="shortcut-row__keys" aria-label={item.keys.join(' + ')}>
+                          {item.keys.map((key) => <kbd key={key}>{key}</kbd>)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
               ))}
-            </RadioGroup.Root>
+            </div>
           </section>
         ) : null}
 
@@ -199,6 +221,7 @@ export function SettingsModal({
               <h3>{copy.switchDirectoryTitle}</h3>
               <p>{copy.switchDirectoryDescription}</p>
             </div>
+            {error ? <div className="error-banner" role="alert">{error}</div> : null}
             <div className="language-options">
               <button
                 type="button"

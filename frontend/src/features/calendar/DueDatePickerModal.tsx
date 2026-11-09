@@ -45,7 +45,7 @@ export function DueDatePickerModal({
   onClear,
 }: DueDatePickerModalProps) {
   return (
-    <Modal open={isOpen} onClose={onClose} contentClassName="due-date-modal">
+    <Modal title={title} open={isOpen} onClose={onClose} contentClassName="due-date-modal">
       <div className="due-date-modal__header">
         <div className="calendar-toolbar__title">
           <h2>{title}</h2>

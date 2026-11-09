@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -52,7 +53,14 @@ func (m *Manager) Current() *AppConfig {
 	return &copyValue
 }
 
-func (m *Manager) UpdateStorageDir(storageDir string, copyData bool) (*AppConfig, error) {
+func (m *Manager) PrepareStorageDir(storageDir string) (*AppConfig, error) {
+	if strings.TrimSpace(storageDir) == "" {
+		return nil, fmt.Errorf("storage directory is empty")
+	}
+	storageDir, err := filepath.Abs(storageDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve storage directory: %w", err)
+	}
 	cfg := &AppConfig{
 		StorageDir: storageDir,
 		DBPath:     filepath.Join(storageDir, "todo.db"),
@@ -62,17 +70,17 @@ func (m *Manager) UpdateStorageDir(storageDir string, copyData bool) (*AppConfig
 	if err := ensureStorageDir(cfg.StorageDir); err != nil {
 		return nil, err
 	}
-	if copyData {
-		if err := copyIfMissing(m.current.DBPath, cfg.DBPath); err != nil {
-			return nil, err
-		}
-	}
-	if err := m.persist(cfg); err != nil {
-		return nil, err
-	}
+	return cfg, nil
+}
 
-	m.current = cfg
-	return m.Current(), nil
+// CommitStorage is called only after the target database is ready to use.
+func (m *Manager) CommitStorage(cfg *AppConfig) error {
+	if err := m.persist(cfg); err != nil {
+		return err
+	}
+	copyValue := *cfg
+	m.current = &copyValue
+	return nil
 }
 
 func (m *Manager) UpdateLanguage(language string) (*AppConfig, error) {
@@ -134,8 +142,28 @@ func (m *Manager) persist(cfg *AppConfig) error {
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	if err := os.WriteFile(m.configFile, content, 0o644); err != nil {
+	temporary, err := os.CreateTemp(filepath.Dir(m.configFile), "config-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temporary config: %w", err)
+	}
+	defer os.Remove(temporary.Name())
+	if err := temporary.Chmod(0o644); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("set config permissions: %w", err)
+	}
+	if _, err := temporary.Write(content); err != nil {
+		_ = temporary.Close()
 		return fmt.Errorf("write config: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("sync config: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close config: %w", err)
+	}
+	if err := os.Rename(temporary.Name(), m.configFile); err != nil {
+		return fmt.Errorf("replace config: %w", err)
 	}
 	return nil
 }
@@ -146,31 +174,6 @@ func ensureStorageDir(storageDir string) error {
 	}
 	if err := os.MkdirAll(storageDir, 0o755); err != nil {
 		return fmt.Errorf("create storage dir: %w", err)
-	}
-	return nil
-}
-
-func copyIfMissing(src, dst string) error {
-	if src == "" || dst == "" || src == dst {
-		return nil
-	}
-
-	if _, err := os.Stat(dst); err == nil {
-		return nil
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("check target db: %w", err)
-	}
-
-	content, err := os.ReadFile(src)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("read source db: %w", err)
-	}
-
-	if err := os.WriteFile(dst, content, 0o644); err != nil {
-		return fmt.Errorf("copy db: %w", err)
 	}
 	return nil
 }

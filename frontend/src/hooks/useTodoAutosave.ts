@@ -1,93 +1,45 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { backend } from '../lib/wails';
-import { fromTodo, persistableDraft, readError } from '../lib/todos';
-import type { SaveStatus } from '../appTypes';
+import { fromTodo, persistableDraft } from '../lib/todos';
+import { useDraftAutosave } from './useDraftAutosave';
 import type { Todo, TodoDraft } from '../types';
 
 type UseTodoAutosaveArgs = {
+  databasePath: string;
   selectedId: string | null;
   selectedTodo: Todo | null;
   draft: TodoDraft;
-  isEditing: boolean;
+  suspended: boolean;
   setSaving: (value: boolean) => void;
   setError: (value: string) => void;
   unknownErrorText: string;
-  syncUpdatedTodo: (todo: Todo, preserveEditingFields?: boolean) => void;
+  syncUpdatedTodo: (todo: Todo, preserveDraft?: boolean) => void;
+  onSaved?: () => Promise<void>;
 };
 
-export function useTodoAutosave({
-  selectedId,
-  selectedTodo,
-  draft,
-  isEditing,
-  setSaving,
-  setError,
-  unknownErrorText,
-  syncUpdatedTodo,
-}: UseTodoAutosaveArgs) {
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
-  const autosaveTokenRef = useRef(0);
-
-  const draftSignature = useMemo(() => JSON.stringify(persistableDraft(draft)), [draft]);
-  const selectedSignature = useMemo(
-    () => (selectedTodo ? JSON.stringify(persistableDraft(fromTodo(selectedTodo))) : ''),
-    [selectedTodo],
-  );
-
-  useEffect(() => {
-    if (!isEditing || !selectedTodo) {
-      setSaveStatus('saved');
-      return;
-    }
-
-    if (draftSignature === selectedSignature) {
-      setSaveStatus('saved');
-      return;
-    }
-
-    setSaveStatus('typing');
-    const token = autosaveTokenRef.current + 1;
-    autosaveTokenRef.current = token;
-
-    const timer = window.setTimeout(() => {
-      void persistDraft(token);
-    }, 700);
-
-    return () => window.clearTimeout(timer);
-  }, [draftSignature, isEditing, selectedSignature, selectedTodo]);
-
-  async function persistDraft(token?: number) {
-    if (!selectedId) {
-      return;
-    }
-
-    if (token !== undefined && token !== autosaveTokenRef.current) {
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setSaveStatus('saving');
-      const updated = await backend.updateTodo({
-        id: selectedId,
-        ...draft,
-      });
-      if (token !== undefined && token !== autosaveTokenRef.current) {
-        return;
+export function useTodoAutosave(args: UseTodoAutosaveArgs) {
+  const { databasePath, selectedId, selectedTodo, draft } = args;
+  const refreshNeeded = useRef(false);
+  return useDraftAutosave({
+    scope: databasePath && selectedId ? JSON.stringify([databasePath, selectedId]) : null,
+    draft: persistableDraft(draft),
+    savedDraft: selectedTodo ? persistableDraft(fromTodo(selectedTodo)) : null,
+    delay: 700,
+    suspended: args.suspended,
+    save: (value) => backend.updateTodo({ id: selectedId!, databasePath, ...value }),
+    fromResult: (todo: Todo) => persistableDraft(fromTodo(todo)),
+    apply: (updated, preserveDraft) => {
+      if (JSON.stringify(selectedTodo?.noteIds) !== JSON.stringify(updated.noteIds)) refreshNeeded.current = true;
+      args.syncUpdatedTodo(updated, preserveDraft);
+    },
+    onSettled: async () => {
+      if (refreshNeeded.current && args.onSaved) {
+        await args.onSaved();
+        refreshNeeded.current = false;
       }
-      syncUpdatedTodo(updated);
-      setSaveStatus('saved');
-      setError('');
-    } catch (err) {
-      setSaveStatus('failed');
-      setError(readError(err, unknownErrorText));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return {
-    saveStatus,
-    setSaveStatus,
-  };
+    },
+    setSaving: args.setSaving,
+    setError: args.setError,
+    errorText: args.unknownErrorText,
+  });
 }

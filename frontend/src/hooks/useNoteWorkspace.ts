@@ -1,204 +1,183 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { SaveStatus } from '../appTypes';
 import { readError } from '../lib/todos';
 import { backend } from '../lib/wails';
+import { useDraftAutosave } from './useDraftAutosave';
 import type { Note, NoteDraft } from '../types';
 
 type UseNoteWorkspaceArgs = {
+  databasePath: string;
   notes: Note[];
   setNotes: Dispatch<SetStateAction<Note[]>>;
   untitledNote: string;
   unknownErrorText: string;
+  suspended?: boolean;
   setSaving: (value: boolean) => void;
   setError: (value: string) => void;
+  onSaved?: () => Promise<void>;
 };
 
-const emptyNoteDraft = (): NoteDraft => ({ title: '', contentMarkdown: '' });
+const emptyNoteDraft = (): NoteDraft => ({
+  title: '', contentMarkdown: '', tags: [], todoIds: [],
+  isPinned: false, isFavorite: false, isArchived: false,
+});
 
 function fromNote(note: Note): NoteDraft {
   return {
-    title: note.title,
-    contentMarkdown: note.contentMarkdown,
+    title: note.title, contentMarkdown: note.contentMarkdown, tags: note.tags,
+    todoIds: note.todoIds, isPinned: note.isPinned,
+    isFavorite: note.isFavorite, isArchived: note.isArchived,
   };
 }
 
 function sortNotes(notes: Note[]) {
-  return [...notes].sort(
-    (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
-  );
+  return [...notes].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
 }
 
-export function useNoteWorkspace({
-  notes,
-  setNotes,
-  untitledNote,
-  unknownErrorText,
-  setSaving,
-  setError,
-}: UseNoteWorkspaceArgs) {
+export function useNoteWorkspace({ databasePath, notes, setNotes, untitledNote, unknownErrorText, suspended, setSaving, setError, onSaved }: UseNoteWorkspaceArgs) {
+  const [boundDatabase, setBoundDatabase] = useState(databasePath);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<NoteDraft>(emptyNoteDraft);
-  const [noteSaveStatus, setNoteSaveStatus] = useState<SaveStatus>('saved');
   const [isNotePreview, setIsNotePreview] = useState(false);
-  const autosaveTokenRef = useRef(0);
+  const [isDeletingNote, setIsDeletingNote] = useState(false);
+  const creatingRef = useRef(false);
+  const deletingRef = useRef(false);
+  const navigationRef = useRef(0);
+  const draftEditedRef = useRef(false);
+  const refreshNeeded = useRef(false);
+  const latest = useRef({ notes, selectedNoteId, databasePath });
+  latest.current = { notes, selectedNoteId, databasePath };
 
-  const selectedNote = useMemo(
-    () => notes.find((note) => note.id === selectedNoteId) ?? null,
-    [notes, selectedNoteId],
-  );
+  const selectedNote = useMemo(() => boundDatabase === databasePath
+    ? notes.find((note) => note.id === selectedNoteId) ?? null : null,
+  [notes, selectedNoteId, databasePath, boundDatabase]);
+  const scope = selectedNote && databasePath && boundDatabase === databasePath
+    ? JSON.stringify([databasePath, selectedNote.id]) : null;
+  const savedSignature = JSON.stringify(selectedNote ? fromNote(selectedNote) : null);
+  const previousModel = useRef({ scope, signature: savedSignature });
 
-  const draftSignature = useMemo(() => JSON.stringify(noteDraft), [noteDraft]);
-  const selectedSignature = useMemo(
-    () => (selectedNote ? JSON.stringify(fromNote(selectedNote)) : ''),
-    [selectedNote],
-  );
-
-  useEffect(() => {
-    if (selectedNoteId && notes.some((note) => note.id === selectedNoteId)) {
-      return;
-    }
+  // A database switch starts a new session, even when note IDs match.
+  // Autosave has no scope until this reset has committed.
+  useLayoutEffect(() => {
+    if (boundDatabase === databasePath && selectedNoteId && notes.some((note) => note.id === selectedNoteId)) return;
     const first = notes[0] ?? null;
+    navigationRef.current += 1;
+    draftEditedRef.current = false;
+    setBoundDatabase(databasePath);
     setSelectedNoteId(first?.id ?? null);
     setNoteDraft(first ? fromNote(first) : emptyNoteDraft());
-    setNoteSaveStatus('saved');
-  }, [notes, selectedNoteId]);
+    setIsNotePreview(Boolean(first));
+  }, [databasePath, boundDatabase, notes, selectedNoteId]);
 
-  useEffect(() => {
-    if (!selectedNote || draftSignature === selectedSignature) {
-      setNoteSaveStatus('saved');
-      return;
+  useLayoutEffect(() => {
+    const previous = previousModel.current;
+    if (!draftEditedRef.current && scope && previous.scope === scope && previous.signature !== savedSignature
+      && JSON.stringify(noteDraft) === previous.signature && selectedNote) {
+      setNoteDraft(fromNote(selectedNote));
     }
+    previousModel.current = { scope, signature: savedSignature };
+  }, [scope, savedSignature, selectedNote, noteDraft]);
 
-    setNoteSaveStatus('typing');
-    const token = autosaveTokenRef.current + 1;
-    autosaveTokenRef.current = token;
-    const timer = window.setTimeout(() => {
-      void persistNote(selectedNote.id, noteDraft, token);
-    }, 650);
-
-    return () => window.clearTimeout(timer);
-  }, [draftSignature, selectedNote, selectedSignature]);
-
-  function syncNote(updated: Note) {
-    setNotes((current) =>
-      sortNotes(current.map((note) => (note.id === updated.id ? updated : note))),
-    );
-    if (selectedNoteId === updated.id) {
-      setNoteDraft(fromNote(updated));
-    }
-  }
-
-  async function persistNote(id: string, draft: NoteDraft, token?: number) {
-    if (token !== undefined && token !== autosaveTokenRef.current) {
-      return false;
-    }
-
-    try {
-      setSaving(true);
-      setNoteSaveStatus('saving');
-      const updated = await backend.updateNote({
-        id,
-        title: draft.title.trim() || untitledNote,
-        contentMarkdown: draft.contentMarkdown,
-      });
-      if (token !== undefined && token !== autosaveTokenRef.current) {
-        return false;
+  const { saveStatus: noteSaveStatus, flush: flushCurrentNote, markEdited } = useDraftAutosave({
+    scope, draft: noteDraft, savedDraft: selectedNote ? fromNote(selectedNote) : null,
+    delay: 650, suspended: suspended || isDeletingNote,
+    save: (value) => backend.updateNote({ id: selectedNoteId!, databasePath, ...value, title: value.title.trim() || untitledNote }),
+    fromResult: fromNote,
+    apply: (updated, preserveDraft) => {
+      const previous = latest.current.notes.find((note) => note.id === updated.id);
+      if (previous?.title !== updated.title || JSON.stringify(previous?.todoIds) !== JSON.stringify(updated.todoIds)) refreshNeeded.current = true;
+      setNotes((current) => sortNotes(current.map((note) => note.id === updated.id ? updated : note)));
+      if (!preserveDraft && latest.current.selectedNoteId === updated.id) {
+        draftEditedRef.current = false;
+        setNoteDraft(fromNote(updated));
       }
-      syncNote(updated);
-      setNoteSaveStatus('saved');
-      setError('');
-      return true;
-    } catch (err) {
-      setNoteSaveStatus('failed');
-      setError(readError(err, unknownErrorText));
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  }
+    },
+    onSettled: async () => {
+      if (refreshNeeded.current && onSaved) {
+        await onSaved();
+        refreshNeeded.current = false;
+      }
+    },
+    setSaving, setError, errorText: unknownErrorText,
+  });
 
-  async function flushCurrentNote() {
-    autosaveTokenRef.current += 1;
-    if (!selectedNote || draftSignature === selectedSignature) {
-      return true;
-    }
-    return persistNote(selectedNote.id, noteDraft);
-  }
+  useLayoutEffect(() => {
+    if (noteSaveStatus === 'saved' && JSON.stringify(noteDraft) === savedSignature) draftEditedRef.current = false;
+  }, [noteSaveStatus, noteDraft, savedSignature]);
+
+  const changeNoteDraft: Dispatch<SetStateAction<NoteDraft>> = (updater) => {
+    markEdited();
+    draftEditedRef.current = true;
+    setNoteDraft((current) => {
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      if (JSON.stringify(next) !== JSON.stringify(current)) draftEditedRef.current = true;
+      return next;
+    });
+  };
 
   async function selectNote(note: Note) {
-    if (note.id === selectedNoteId) {
-      return;
-    }
-    if (!(await flushCurrentNote())) {
-      return;
-    }
-    const freshNote = notes.find((item) => item.id === note.id) ?? note;
+    if (note.id === latest.current.selectedNoteId) return true;
+    const navigation = ++navigationRef.current;
+    if (!(await flushCurrentNote()) || navigation !== navigationRef.current) return false;
+    const freshNote = latest.current.notes.find((item) => item.id === note.id);
+    if (!freshNote) return false;
+    draftEditedRef.current = false;
     setSelectedNoteId(freshNote.id);
     setNoteDraft(fromNote(freshNote));
-    setIsNotePreview(false);
-    setNoteSaveStatus('saved');
+    setIsNotePreview(true);
     setError('');
+    return true;
   }
 
   async function createNote() {
-    if (!(await flushCurrentNote())) {
-      return;
-    }
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    setSaving(true);
     try {
-      setSaving(true);
-      const created = await backend.createNote({
-        title: untitledNote,
-        contentMarkdown: '',
-      });
+      if (!(await flushCurrentNote())) return;
+      const created = await backend.createNote({ ...emptyNoteDraft(), title: untitledNote });
+      draftEditedRef.current = false;
       setNotes((current) => sortNotes([created, ...current]));
       setSelectedNoteId(created.id);
       setNoteDraft(fromNote(created));
       setIsNotePreview(false);
-      setNoteSaveStatus('saved');
       setError('');
-    } catch (err) {
-      setError(readError(err, unknownErrorText));
+    } catch (error) {
+      setError(readError(error, unknownErrorText));
     } finally {
+      creatingRef.current = false;
       setSaving(false);
     }
   }
 
   async function deleteNote() {
-    if (!selectedNoteId) {
-      return false;
-    }
+    const id = latest.current.selectedNoteId;
+    if (!id || deletingRef.current) return false;
+    deletingRef.current = true;
+    setIsDeletingNote(true);
+    setSaving(true);
     try {
-      setSaving(true);
-      autosaveTokenRef.current += 1;
-      await backend.deleteNote(selectedNoteId);
-      const remaining = notes.filter((note) => note.id !== selectedNoteId);
+      if (!(await flushCurrentNote())) return false;
+      await backend.deleteNote(id);
+      const remaining = latest.current.notes.filter((note) => note.id !== id);
       const next = remaining[0] ?? null;
+      draftEditedRef.current = false;
       setNotes(remaining);
       setSelectedNoteId(next?.id ?? null);
       setNoteDraft(next ? fromNote(next) : emptyNoteDraft());
-      setIsNotePreview(false);
-      setNoteSaveStatus('saved');
+      setIsNotePreview(Boolean(next));
       setError('');
       return true;
-    } catch (err) {
-      setError(readError(err, unknownErrorText));
+    } catch (error) {
+      setError(readError(error, unknownErrorText));
       return false;
     } finally {
+      deletingRef.current = false;
+      setIsDeletingNote(false);
       setSaving(false);
     }
   }
 
-  return {
-    selectedNote,
-    selectedNoteId,
-    noteDraft,
-    noteSaveStatus,
-    isNotePreview,
-    setNoteDraft,
-    setIsNotePreview,
-    selectNote,
-    createNote,
-    deleteNote,
-  };
+  return { selectedNote, selectedNoteId, noteDraft, noteSaveStatus, isNotePreview,
+    setNoteDraft: changeNoteDraft, setIsNotePreview, selectNote, createNote, deleteNote, flushCurrentNote };
 }

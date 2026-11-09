@@ -1,10 +1,19 @@
-import { IconChevronDown, IconFolder, IconPlus, IconX } from '@tabler/icons-react';
-import * as Popover from '@radix-ui/react-popover';
-import { useMemo } from 'react';
+import {
+  IconArchive,
+  IconListCheck,
+  IconPlus,
+  IconStar,
+  IconStarFilled,
+} from '@tabler/icons-react';
+import { useMemo, useState } from 'react';
 import type { PendingSubitem, SaveStatus } from '../../appTypes';
-import type { Todo, TodoDraft, TodoGroup, TodoSubitem } from '../../types';
+import type { Note, Todo, TodoDraft, TodoGroup, TodoSubitem } from '../../types';
+import { RelationPickerDialog } from '../relations/RelationPickerDialog';
+import { TodoProperties } from './TodoProperties';
+import type { TodoPropertiesCopy } from './TodoProperties';
+import { SaveIndicator } from '../_primitives/SaveIndicator';
 
-type DetailCopy = {
+type DetailCopy = TodoPropertiesCopy & {
   blankTitle: string;
   blankDescription: string;
   exitEdit: string;
@@ -16,15 +25,24 @@ type DetailCopy = {
   dueDateLabel: string;
   dueDateNone: string;
   clearDate: string;
-  markdown: string;
-  markdownPlaceholder: string;
+  contentPlaceholder: string;
   subitemsTitle: string;
   deleteSelectedSubitems: string;
   addSubitem: string;
   subitemPlaceholder: string;
   emptySubitems: string;
   untitledTodo: string;
+  linkedNotesLabel: string;
+  relationSearchPlaceholder: string;
+  relationEmpty: string;
+  relationSelectedCount: (count: number) => string;
+  relationDone: string;
+  close: string;
+  untitledRelatedItem: string;
+  favorite: string;
+  archive: string;
   saveStatus: Record<SaveStatus, string>;
+  retrySave: string;
 };
 
 type TodoDetailPaneProps = {
@@ -35,8 +53,10 @@ type TodoDetailPaneProps = {
   saveStatus: SaveStatus;
   isEditing: boolean;
   saving: boolean;
+  isDeleting: boolean;
   draft: TodoDraft;
   groups: TodoGroup[];
+  notes: Note[];
   selectedGroupName: string;
   detailHTML: string;
   visibleSubitems: TodoSubitem[];
@@ -47,9 +67,8 @@ type TodoDetailPaneProps = {
   onExitEditMode: () => void;
   onEnterEditMode: () => void;
   onRequestDelete: () => void;
+  onRetrySave: () => void;
   onDraftChange: (updater: (current: TodoDraft) => TodoDraft) => void;
-  onDraftGroupChange: (groupId: string) => void;
-  onOpenDueDatePicker: () => void;
   onDeleteSelectedSubitems: () => void;
   onAddSubitemInput: () => void;
   onToggleSubitemSelection: (id: string) => void;
@@ -73,8 +92,10 @@ export function TodoDetailPane({
   saveStatus,
   isEditing,
   saving,
+  isDeleting,
   draft,
   groups,
+  notes,
   selectedGroupName,
   detailHTML,
   visibleSubitems,
@@ -85,9 +106,8 @@ export function TodoDetailPane({
   onExitEditMode,
   onEnterEditMode,
   onRequestDelete,
+  onRetrySave,
   onDraftChange,
-  onDraftGroupChange,
-  onOpenDueDatePicker,
   onDeleteSelectedSubitems,
   onAddSubitemInput,
   onToggleSubitemSelection,
@@ -102,17 +122,31 @@ export function TodoDetailPane({
   formattedDraftDueDate,
   formattedSelectedDueDate,
 }: TodoDetailPaneProps) {
+  const [isRelationPickerOpen, setIsRelationPickerOpen] = useState(false);
+  const activeNoteIds = useMemo(() => draft.noteIds.filter((id) => notes.some((note) => note.id === id)), [draft.noteIds, notes]);
   const activeGroupName = useMemo(
     () => groups.find((group) => group.id === draft.groupId)?.name ?? selectedGroupName,
     [draft.groupId, groups, selectedGroupName],
   );
+
+  const relationItems = useMemo(() => notes
+    .filter((note) => !note.isArchived || draft.noteIds.includes(note.id))
+    .map((note) => ({
+      id: note.id,
+      title: note.title || copy.untitledRelatedItem,
+      description: note.contentMarkdown.replace(/\s+/g, ' ').trim().slice(0, 120) || undefined,
+      keywords: [note.contentMarkdown, ...note.tags].join('\n'),
+    })), [copy.untitledRelatedItem, draft.noteIds, notes]);
 
   return (
     <main className="detail-panel">
       {error ? <div className="error-banner">{error}</div> : null}
 
       {!selectedTodo ? (
-        <div className="blank-state">
+        <div className="todo-blank-state">
+          <span className="todo-blank-state__icon" aria-hidden="true">
+            <IconListCheck size={22} stroke={1.8} />
+          </span>
           <h2>{copy.blankTitle}</h2>
           <p>{copy.blankDescription}</p>
         </div>
@@ -121,7 +155,27 @@ export function TodoDetailPane({
           <div className="detail-toolbar">
             <span className="created-at">{createdAtText}</span>
             <div className="detail-toolbar__actions">
-              {isEditing ? <span className="save-hint">{copy.saveStatus[saveStatus]}</span> : null}
+              {isEditing || saveStatus === 'failed' ? <SaveIndicator status={saveStatus} labels={copy.saveStatus} retryLabel={copy.retrySave} onRetry={onRetrySave} /> : null}
+              <button
+                type="button"
+                className={`todo-state-button ${draft.isFavorite ? 'is-active is-favorite' : ''}`}
+                onClick={() => onDraftChange((current) => ({ ...current, isFavorite: !current.isFavorite }))}
+                aria-label={copy.favorite}
+                title={copy.favorite}
+                aria-pressed={draft.isFavorite}
+              >
+                {draft.isFavorite ? <IconStarFilled size={15} aria-hidden="true" /> : <IconStar size={15} stroke={2} aria-hidden="true" />}
+              </button>
+              <button
+                type="button"
+                className={`todo-state-button ${draft.isArchived ? 'is-active' : ''}`}
+                onClick={() => onDraftChange((current) => ({ ...current, isArchived: !current.isArchived }))}
+                aria-label={copy.archive}
+                title={copy.archive}
+                aria-pressed={draft.isArchived}
+              >
+                <IconArchive size={15} stroke={2} aria-hidden="true" />
+              </button>
               {isEditing ? (
                 <button type="button" className="topbar-link" onClick={onExitEditMode}>
                   {copy.exitEdit}
@@ -131,7 +185,7 @@ export function TodoDetailPane({
                   {copy.edit}
                 </button>
               )}
-              <button type="button" className="topbar-link" onClick={onRequestDelete} disabled={saving}>
+              <button type="button" className="topbar-link" onClick={onRequestDelete} disabled={isDeleting}>
                 {copy.delete}
               </button>
             </div>
@@ -139,89 +193,37 @@ export function TodoDetailPane({
 
           {isEditing ? (
             <>
-              <section className="detail-section">
-                <input
-                  className="title-input"
-                  value={draft.title}
-                  onChange={(event) => onDraftChange((current) => ({ ...current, title: event.target.value }))}
-                  placeholder={copy.titlePlaceholder}
-                />
-                <textarea
-                  className="summary-input"
-                  rows={2}
-                  value={draft.summary}
-                  onChange={(event) => onDraftChange((current) => ({ ...current, summary: event.target.value }))}
-                  placeholder={copy.summaryPlaceholder}
-                />
-                <div className="detail-date-field">
-                  <span>{copy.groupLabel}</span>
-                  <div className="detail-select-wrap">
-                    <Popover.Root>
-                      <Popover.Trigger asChild>
-                        <button type="button" className="detail-group-picker">
-                          <span className="detail-group-picker__value">
-                            <IconFolder size={15} stroke={2} />
-                            <strong>{activeGroupName}</strong>
-                          </span>
-                          <span className="detail-group-picker__icon">
-                            <IconChevronDown size={14} stroke={2} />
-                          </span>
-                        </button>
-                      </Popover.Trigger>
-                      <Popover.Portal>
-                        <Popover.Content className="detail-group-menu" align="start" sideOffset={6}>
-                          {groups.map((group) => (
-                            <button
-                              key={group.id}
-                              type="button"
-                              className={`detail-group-menu__item ${draft.groupId === group.id ? 'is-active' : ''}`}
-                              onClick={() => onDraftGroupChange(group.id)}
-                            >
-                              <span className="detail-group-menu__item-icon">
-                                <IconFolder size={14} stroke={2} />
-                              </span>
-                              <span>{group.name}</span>
-                            </button>
-                          ))}
-                        </Popover.Content>
-                      </Popover.Portal>
-                    </Popover.Root>
-                  </div>
+              <section className="detail-section todo-edit-section">
+                <div className="todo-edit-identity">
+                  <input
+                    className="title-input"
+                    value={draft.title}
+                    onChange={(event) => onDraftChange((current) => ({ ...current, title: event.target.value }))}
+                    placeholder={copy.titlePlaceholder}
+                  />
+                  <textarea
+                    className="summary-input"
+                    rows={2}
+                    value={draft.summary}
+                    onChange={(event) => onDraftChange((current) => ({ ...current, summary: event.target.value }))}
+                    placeholder={copy.summaryPlaceholder}
+                  />
                 </div>
-                <div className="detail-date-field">
-                  <span>{copy.dueDateLabel}</span>
-                  <div className="detail-date-picker-row">
-                    <button
-                      type="button"
-                      className="detail-date-picker"
-                      onClick={onOpenDueDatePicker}
-                    >
-                      <span className={`detail-date-picker__value ${draft.dueDate ? 'has-value' : ''}`}>
-                        <strong>{formattedDraftDueDate}</strong>
-                      </span>
-                      <span className="detail-date-picker__icon">
-                        <IconChevronDown size={14} stroke={2} />
-                      </span>
-                    </button>
-                    {draft.dueDate ? (
-                      <button
-                        type="button"
-                        className="detail-date-picker__clear"
-                        onClick={() => onDraftChange((current) => ({ ...current, dueDate: '' }))}
-                        aria-label={copy.clearDate}
-                        title={copy.clearDate}
-                      >
-                        <IconX size={14} stroke={2} />
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
+
+                <TodoProperties
+                  key={selectedTodo.id}
+                  linkedNoteCount={activeNoteIds.length}
+                  draft={draft}
+                  groups={groups}
+                  groupName={activeGroupName}
+                  dueDateText={formattedDraftDueDate}
+                  copy={copy}
+                  onDraftChange={onDraftChange}
+                  onOpenRelations={() => setIsRelationPickerOpen(true)}
+                />
               </section>
 
               <section className="detail-section">
-                <div className="detail-section__header">
-                  <h3>{copy.markdown}</h3>
-                </div>
                 <textarea
                   className="detail-textarea"
                   rows={18}
@@ -232,7 +234,8 @@ export function TodoDetailPane({
                       detailMarkdown: event.target.value,
                     }))
                   }
-                  placeholder={copy.markdownPlaceholder}
+                  placeholder={copy.contentPlaceholder}
+                  aria-label={copy.contentPlaceholder}
                 />
               </section>
 
@@ -290,6 +293,7 @@ export function TodoDetailPane({
                             onChange={(event) => onEditingSubitemContentChange(event.target.value)}
                             onBlur={() => void onCommitEditingSubitem()}
                             onKeyDown={(event) => {
+                              if (event.nativeEvent.isComposing || event.keyCode === 229) return;
                               if (event.key === 'Enter') {
                                 event.preventDefault();
                                 void onCommitEditingSubitem();
@@ -322,6 +326,7 @@ export function TodoDetailPane({
                         onChange={(event) => onPendingSubitemChange(item.id, event.target.value)}
                         onBlur={() => void onCommitPendingSubitem(item.id)}
                         onKeyDown={(event) => {
+                          if (event.nativeEvent.isComposing || event.keyCode === 229) return;
                           if (event.key === 'Enter') {
                             event.preventDefault();
                             void onCommitPendingSubitem(item.id);
@@ -351,6 +356,12 @@ export function TodoDetailPane({
                   <div className="detail-date-display">
                     <span>{copy.dueDateLabel}</span>
                     <strong>{formattedSelectedDueDate}</strong>
+                  </div>
+                  <div className="detail-static__chips">
+                    <span className={`detail-priority-chip is-${selectedTodo.priority}`}>
+                      {copy.priorities[selectedTodo.priority]}
+                    </span>
+                    {selectedTodo.tags.map((tag) => <span key={tag}>#{tag}</span>)}
                   </div>
                 </div>
               </section>
@@ -385,6 +396,24 @@ export function TodoDetailPane({
               </section>
             </>
           )}
+          <RelationPickerDialog
+            isOpen={isRelationPickerOpen}
+            title={copy.linkedNotesLabel}
+            searchPlaceholder={copy.relationSearchPlaceholder}
+            emptyText={copy.relationEmpty}
+            selectedCountText={copy.relationSelectedCount(activeNoteIds.length)}
+            closeLabel={copy.close}
+            doneLabel={copy.relationDone}
+            items={relationItems}
+            selectedIds={activeNoteIds}
+            onToggle={(noteId) => onDraftChange((current) => ({
+              ...current,
+              noteIds: current.noteIds.includes(noteId)
+                ? current.noteIds.filter((id) => id !== noteId)
+                : [...current.noteIds, noteId],
+            }))}
+            onClose={() => setIsRelationPickerOpen(false)}
+          />
         </>
       )}
     </main>
