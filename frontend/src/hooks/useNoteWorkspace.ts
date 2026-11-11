@@ -11,6 +11,7 @@ type UseNoteWorkspaceArgs = {
   setNotes: Dispatch<SetStateAction<Note[]>>;
   untitledNote: string;
   unknownErrorText: string;
+  markdownErrors: Record<string, string>;
   suspended?: boolean;
   setSaving: (value: boolean) => void;
   setError: (value: string) => void;
@@ -34,7 +35,7 @@ function sortNotes(notes: Note[]) {
   return [...notes].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
 }
 
-export function useNoteWorkspace({ databasePath, notes, setNotes, untitledNote, unknownErrorText, suspended, setSaving, setError, onSaved }: UseNoteWorkspaceArgs) {
+export function useNoteWorkspace({ databasePath, notes, setNotes, untitledNote, unknownErrorText, markdownErrors, suspended, setSaving, setError, onSaved }: UseNoteWorkspaceArgs) {
   const [boundDatabase, setBoundDatabase] = useState(databasePath);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<NoteDraft>(emptyNoteDraft);
@@ -42,6 +43,7 @@ export function useNoteWorkspace({ databasePath, notes, setNotes, untitledNote, 
   const [isDeletingNote, setIsDeletingNote] = useState(false);
   const creatingRef = useRef(false);
   const deletingRef = useRef(false);
+  const markdownTransferRef = useRef(false);
   const navigationRef = useRef(0);
   const draftEditedRef = useRef(false);
   const refreshNeeded = useRef(false);
@@ -178,6 +180,52 @@ export function useNoteWorkspace({ databasePath, notes, setNotes, untitledNote, 
     }
   }
 
+  async function importMarkdown() {
+    if (markdownTransferRef.current || !databasePath) return;
+    markdownTransferRef.current = true;
+    const sourceDatabase = databasePath;
+    setSaving(true);
+    try {
+      if (!(await flushCurrentNote())) return;
+      const imported = await backend.importNoteMarkdown({ databasePath: sourceDatabase });
+      if (!imported) return;
+      if (latest.current.databasePath !== sourceDatabase) throw new Error('database changed');
+      draftEditedRef.current = false;
+      setNotes((current) => sortNotes([imported, ...current]));
+      setSelectedNoteId(imported.id);
+      setNoteDraft(fromNote(imported));
+      setIsNotePreview(true);
+      setError('');
+      if (onSaved) await onSaved();
+    } catch (error) {
+      const message = readError(error, unknownErrorText);
+      setError(markdownErrors[message] ?? message);
+    } finally {
+      markdownTransferRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  async function exportDocument(format: 'markdown' | 'docx' | 'pdf' = 'markdown') {
+    const id = latest.current.selectedNoteId;
+    if (!id || markdownTransferRef.current) return;
+    markdownTransferRef.current = true;
+    const sourceDatabase = databasePath;
+    setSaving(true);
+    try {
+      if (!(await flushCurrentNote())) return;
+      if (format === 'markdown') await backend.exportNoteMarkdown({ id, databasePath: sourceDatabase });
+      else await backend.exportNoteDocument({ id, databasePath: sourceDatabase, format });
+      setError('');
+    } catch (error) {
+      setError(readError(error, unknownErrorText));
+    } finally {
+      markdownTransferRef.current = false;
+      setSaving(false);
+    }
+  }
+
   return { selectedNote, selectedNoteId, noteDraft, noteSaveStatus, isNotePreview,
-    setNoteDraft: changeNoteDraft, setIsNotePreview, selectNote, createNote, deleteNote, flushCurrentNote };
+    setNoteDraft: changeNoteDraft, setIsNotePreview, selectNote, createNote, deleteNote, flushCurrentNote,
+    importMarkdown, exportDocument };
 }

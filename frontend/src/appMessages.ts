@@ -9,6 +9,14 @@ export const APP_INFO = {
 export const messages = {
   'zh-CN': {
     setting: '设置',
+    importMarkdown: '导入 Markdown',
+    exportMarkdown: '导出 Markdown',
+    noteTransfer: { title: '导入/导出', importLabel: '导入', exportLabel: '导出', markdown: 'Markdown', word: 'Word (.docx)', pdf: 'PDF', exportWord: '导出 Word', exportPdf: '导出 PDF' },
+    markdownErrors: {
+      'unsupported markdown extension': '请选择 .md 或 .markdown 文件。',
+      'markdown file exceeds 16 mb': 'Markdown 文件不能超过 16 MB。',
+      'markdown file must be utf-8': '请将文件转换为 UTF-8 编码后再导入。',
+    },
     targetDatabaseExists: '目标目录已有数据库，尚未迁移。请选择打开目标已有数据，或另选目录。',
     retrySave: '重试',
     databaseChanged: '数据目录已切换，已拦截旧目录的保存请求。请重新打开对应内容。',
@@ -41,7 +49,7 @@ export const messages = {
     todoContentPlaceholder: '支持Markdown格式输入',
     subitemsTitle: '子项待办',
     addSubitem: '添加子项',
-    deleteSelectedSubitems: '删除选中',
+    removeSubitem: '移除子项',
     subitemPlaceholder: '输入子项内容后按回车',
     emptySubitems: '暂无子项',
     calendarEntryTitle: '日历看板',
@@ -141,6 +149,7 @@ export const messages = {
       clearFilters: '清除筛选',
       tagsTitle: '标签',
       allTags: '全部标签',
+      allPriorities: '全部优先级',
       smartViews: {
         all: '全部',
         today: '今天',
@@ -231,6 +240,14 @@ export const messages = {
   },
   'en-US': {
     setting: 'Settings',
+    importMarkdown: 'Import Markdown',
+    exportMarkdown: 'Export Markdown',
+    noteTransfer: { title: 'Import/Export', importLabel: 'Import', exportLabel: 'Export', markdown: 'Markdown', word: 'Word (.docx)', pdf: 'PDF', exportWord: 'Export Word', exportPdf: 'Export PDF' },
+    markdownErrors: {
+      'unsupported markdown extension': 'Choose a .md or .markdown file',
+      'markdown file exceeds 16 mb': 'Markdown files must not exceed 16 MB',
+      'markdown file must be utf-8': 'Convert the file to UTF-8 before importing',
+    },
     targetDatabaseExists: 'The target already contains a database. Open its existing data or choose another directory; no data was copied.',
     retrySave: 'Retry',
     databaseChanged: 'The data directory changed. The old save request was blocked; reopen the item in the current directory.',
@@ -263,7 +280,7 @@ export const messages = {
     todoContentPlaceholder: 'Markdown formatting is supported',
     subitemsTitle: 'Subtasks',
     addSubitem: 'Add subtask',
-    deleteSelectedSubitems: 'Delete Selected',
+    removeSubitem: 'Remove subtask',
     subitemPlaceholder: 'Type a subtask and press Enter',
     emptySubitems: 'No subtasks yet.',
     calendarEntryTitle: 'Calendar Board',
@@ -363,6 +380,7 @@ export const messages = {
       clearFilters: 'Clear filters',
       tagsTitle: 'Tags',
       allTags: 'All tags',
+      allPriorities: 'All priorities',
       smartViews: {
         all: 'All',
         today: 'Today',

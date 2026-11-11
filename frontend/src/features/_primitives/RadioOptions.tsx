@@ -1,4 +1,6 @@
 import * as RadioGroup from '@radix-ui/react-radio-group';
+import { IconCheck } from '@tabler/icons-react';
+import { useId } from 'react';
 
 type RadioOptionsProps<Value extends string> = {
   label: string;
@@ -9,16 +11,21 @@ type RadioOptionsProps<Value extends string> = {
 };
 
 export function RadioOptions<Value extends string>({ label, value, disabled, options, onChange }: RadioOptionsProps<Value>) {
+  const id = useId();
   return (
-    <RadioGroup.Root className="language-options" aria-label={label} value={value}
+    <RadioGroup.Root className="language-options" aria-label={label} value={value} orientation="vertical"
       onValueChange={(next) => onChange(next as Value)} disabled={disabled}>
       {options.map((option) => (
-        <label key={option.value} className={`language-option ${value === option.value ? 'is-active' : ''}`}>
-          <RadioGroup.Item value={option.value} className="language-option__radio" disabled={disabled}>
-            <RadioGroup.Indicator className="language-option__indicator" />
-          </RadioGroup.Item>
-          <span className="language-option__copy"><strong>{option.label}</strong><span>{option.hint}</span></span>
-        </label>
+        <RadioGroup.Item key={option.value} value={option.value} className="language-option" disabled={disabled}
+          aria-labelledby={`${id}-${option.value}-label`} aria-describedby={`${id}-${option.value}-hint`}>
+          <span className="language-option__copy">
+            <strong id={`${id}-${option.value}-label`}>{option.label}</strong>
+            <span id={`${id}-${option.value}-hint`}>{option.hint}</span>
+          </span>
+          <RadioGroup.Indicator className="language-option__indicator">
+            <IconCheck size={18} stroke={2} aria-hidden="true" />
+          </RadioGroup.Indicator>
+        </RadioGroup.Item>
       ))}
     </RadioGroup.Root>
   );

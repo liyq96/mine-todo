@@ -12,6 +12,10 @@ type TestState = {
   notificationPermission: NotificationPermission; notificationFails: boolean;
   notifications: string[]; reminderTick: (() => void) | null;
   delayStorage: boolean; releaseStorage: (() => void) | null;
+  markdownResult: 'ok' | 'cancel' | 'fail'; markdownImportCalls: number;
+  markdownExports: Array<{ title: string; contentMarkdown: string }>;
+  documentExports: Array<{ format: 'docx' | 'pdf'; title: string; contentMarkdown: string }>;
+  delayMarkdownImport: boolean; releaseMarkdownImport: (() => void) | null;
 };
 declare global { interface Window { testState: TestState } }
 
@@ -27,6 +31,8 @@ async function fixture(page: Page, mode = '') {
       todoWrites: [], noteWrites: [], delayNote: mode === 'note-delay', failSaves: mode === 'save-fail', releaseNote: null,
       closeHandler: null, ready: false, closed: 0, notificationPermission: mode === 'permission' ? 'denied' : 'granted', notificationFails: false, notifications: [], reminderTick: null,
       delayStorage: mode === 'storage-delay', releaseStorage: null,
+      markdownResult: 'ok', markdownImportCalls: 0, markdownExports: [], documentExports: [],
+      delayMarkdownImport: mode === 'markdown-delay', releaseMarkdownImport: null,
     };
     if (mode === 'links') {
       state.notes[0].contentMarkdown = '[[Old [A]]]';
@@ -38,6 +44,18 @@ async function fixture(page: Page, mode = '') {
       state.notes[0].todoIds = ['hidden-todo'];
       state.todos[0].noteIds = ['hidden-note'];
     }
+    if (mode === 'subitems') {
+      state.todos[0].subitems = ['子项一', '子项二'].map((content, index) => ({
+        id: `sub-${index}`, todoId: 'todo-a', content, isCompleted: false, createdAt: stamp, updatedAt: stamp,
+      }));
+    }
+    if (mode === 'priorities') {
+      state.todos = ['q1', 'q2', 'q3', 'q4'].map((priority, index) => ({
+        ...base, id: `priority-${index}`, title: `优先级待办 ${index + 1}`, priority: priority as Todo['priority'],
+        tags: [index === 2 ? '生活' : '工作'], isCompleted: index === 0 || index === 3,
+      }));
+    }
+    if (mode === 'empty-notes') state.notes = [];
     const interval = window.setInterval.bind(window);
     Object.defineProperty(window, 'setInterval', { value: (callback: TimerHandler, delay?: number, ...args: unknown[]) => {
       if (delay === 30_000 && typeof callback === 'function') state.reminderTick = () => callback(...args);
@@ -56,6 +74,7 @@ async function fixture(page: Page, mode = '') {
         FrontendReady: async () => { state.ready = true; },
         ConfirmClose: async () => { state.closed += 1; },
         GetBootstrap: async () => snapshot(),
+        UpdateLanguage: async (language: AppConfig['language']) => { state.config.language = language; return snapshot(); },
         UpdateTodo: async (input: TodoUpdate) => {
           if (state.failSaves) throw new Error('save failed');
           if (input.databasePath !== state.config.dbPath) throw new Error('database changed');
@@ -75,10 +94,48 @@ async function fixture(page: Page, mode = '') {
         },
         CreateTodo: async (input: Partial<TodoDraft>) => { const todo = { ...base, ...input, id: `todo-${state.todos.length}`, title: input.title || '新建待办' }; state.todos.push(todo); return structuredClone(todo); },
         CreateNote: async (input: NoteDraft) => { const note = { ...noteBase, ...input, id: `note-${state.notes.length}` }; state.notes.push(note); return structuredClone(note); },
+        ImportNoteMarkdown: async (input: { databasePath: string }) => {
+          state.markdownImportCalls += 1;
+          if (state.delayMarkdownImport) await new Promise<void>(resolve => { state.releaseMarkdownImport = resolve; });
+          if (state.markdownResult === 'cancel') return null;
+          if (state.markdownResult === 'fail') throw new Error('markdown file must be utf-8');
+          if (input.databasePath !== state.config.dbPath) throw new Error('database changed');
+          const note = { ...noteBase, id: `import-${state.notes.length}`, title: '笔记 A', contentMarkdown: '# 导入内容\n\n- [ ] 保留 Markdown\n' };
+          state.notes.push(note);
+          return structuredClone(note);
+        },
+        ExportNoteMarkdown: async (input: { databasePath: string; id: string }) => {
+          if (state.markdownResult === 'cancel') return false;
+          if (state.markdownResult === 'fail') throw new Error('export failed');
+          if (input.databasePath !== state.config.dbPath) throw new Error('database changed');
+          const note = state.notes.find(note => note.id === input.id)!;
+          state.markdownExports.push({ title: note.title, contentMarkdown: note.contentMarkdown });
+          return true;
+        },
+        ExportNoteDocument: async (input: { databasePath: string; id: string; format: 'docx' | 'pdf' }) => {
+          if (state.markdownResult === 'cancel') return false;
+          if (state.markdownResult === 'fail') throw new Error('export failed');
+          if (input.databasePath !== state.config.dbPath) throw new Error('database changed');
+          const note = state.notes.find(note => note.id === input.id)!;
+          state.documentExports.push({ format: input.format, title: note.title, contentMarkdown: note.contentMarkdown });
+          return true;
+        },
         DeleteTodo: async (id: string) => { state.todos.find(t => t.id === id)!.isTrashed = true; },
         DeleteNote: async (id: string) => { state.notes.find(n => n.id === id)!.isTrashed = true; },
         ToggleTodoCompleted: async (id: string) => { const todo = state.todos.find(t => t.id === id)!; todo.isCompleted = !todo.isCompleted; return structuredClone(todo); },
         CreateTodoSubitem: async (input: { todoId: string; content: string }) => { const todo = state.todos.find(t => t.id === input.todoId)!; todo.subitems.push({ ...input, id: `sub-${todo.subitems.length}`, isCompleted: false, createdAt: stamp, updatedAt: stamp }); return structuredClone(todo); },
+        ToggleTodoSubitemCompleted: async (input: { todoId: string; id: string }) => {
+          const todo = state.todos.find(t => t.id === input.todoId)!;
+          const subitem = todo.subitems.find(s => s.id === input.id)!;
+          subitem.isCompleted = !subitem.isCompleted;
+          return structuredClone(todo);
+        },
+        DeleteTodoSubitems: async (input: { todoId: string; ids: string[] }) => {
+          if (state.failSaves) throw new Error('delete failed');
+          const todo = state.todos.find(t => t.id === input.todoId)!;
+          todo.subitems = todo.subitems.filter(s => !input.ids.includes(s.id));
+          return structuredClone(todo);
+        },
         SelectStorageDirectory: async () => 'C:/target',
         UpdateStorageDirectory: async (_: string, copy: boolean) => {
           if (copy) throw new Error('target database already exists');
@@ -91,7 +148,7 @@ async function fixture(page: Page, mode = '') {
     });
   }, mode);
   await page.goto('/');
-  await expect(page.locator('.todo-row')).toHaveCount(2);
+  await expect(page.locator('.todo-row')).toHaveCount(mode === 'priorities' ? 4 : 2);
 }
 
 async function editNote(page: Page) {
@@ -99,6 +156,262 @@ async function editNote(page: Page) {
   await page.getByRole('button', { name: '编辑', exact: true }).click();
   return page.locator('.note-content-input');
 }
+
+async function transferMarkdown(page: Page, action: 'import' | 'export') {
+  await page.getByRole('button', { name: '导入/导出', exact: true }).click();
+  await page.getByRole('menuitem', { name: action === 'import' ? '导入 Markdown' : '导出 Markdown', exact: true }).click();
+}
+
+test('note transfer menu has separate import and export sections', async ({ page }, testInfo) => {
+  await fixture(page);
+  await page.getByRole('button', { name: '笔记', exact: true }).click();
+  await expect(page.locator('.sidebar .note-transfer-button')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '导入 Markdown', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '导出 Markdown', exact: true })).toHaveCount(0);
+  const trigger = page.getByRole('button', { name: '导入/导出', exact: true });
+  await trigger.click();
+  const menu = page.getByRole('menu', { name: '导入/导出', exact: true });
+  await expect(menu.getByRole('group', { name: '导入', exact: true }).getByRole('menuitem')).toHaveText(['Markdown']);
+  await expect(menu.getByRole('group', { name: '导出', exact: true }).getByRole('menuitem')).toHaveText(['Markdown', 'Word (.docx)', 'PDF']);
+  await page.keyboard.press('End');
+  await expect(menu.getByRole('menuitem', { name: '导出 PDF', exact: true })).toBeFocused();
+  await page.screenshot({ path: testInfo.outputPath('note-transfer-menu.png') });
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+});
+
+test('Markdown import creates a new note and export flushes the latest edits', async ({ page }, testInfo) => {
+  await fixture(page);
+  await page.getByRole('button', { name: '笔记', exact: true }).click();
+  await transferMarkdown(page, 'import');
+  await expect(page.locator('.note-list__item')).toHaveCount(3);
+  await expect(page.locator('.note-preview')).toContainText('导入内容');
+  expect(await page.evaluate(() => window.testState.notes.filter(note => note.title === '笔记 A').length)).toBe(2);
+  await page.getByRole('button', { name: '编辑', exact: true }).click();
+  await page.locator('.note-title-input').fill('最新导出标题');
+  await page.locator('.note-content-input').fill('# 最新正文\n\n**保留格式**');
+  await transferMarkdown(page, 'export');
+  await expect.poll(() => page.evaluate(() => window.testState.markdownExports)).toEqual([
+    { title: '最新导出标题', contentMarkdown: '# 最新正文\n\n**保留格式**' },
+  ]);
+  await page.screenshot({ path: testInfo.outputPath('markdown-actions.png') });
+});
+
+for (const [label, format] of [['Word', 'docx'], ['PDF', 'pdf']] as const) {
+  test(`${label} export saves the latest title and body and handles cancellation and failure`, async ({ page }) => {
+    await fixture(page);
+    const content = await editNote(page);
+    await page.locator('.note-title-input').fill('最新文档标题');
+    await content.fill('## 最新正文\n\n**中文内容**');
+    const exportFile = async () => {
+      await page.getByRole('button', { name: '导入/导出', exact: true }).click();
+      await page.getByRole('menuitem', { name: `导出 ${label}`, exact: true }).click();
+    };
+    await exportFile();
+    await expect.poll(() => page.evaluate(() => window.testState.documentExports)).toEqual([
+      { format, title: '最新文档标题', contentMarkdown: '## 最新正文\n\n**中文内容**' },
+    ]);
+    await page.evaluate(() => { window.testState.markdownResult = 'cancel'; });
+    await exportFile();
+    await expect(page.getByRole('button', { name: '导入/导出', exact: true })).toBeEnabled();
+    await expect(content).toHaveValue('## 最新正文\n\n**中文内容**');
+    await page.evaluate(() => { window.testState.markdownResult = 'fail'; });
+    await exportFile();
+    await expect(page.locator('.error-banner')).toHaveText('export failed');
+    expect(await page.evaluate(() => window.testState.documentExports.length)).toBe(1);
+    await expect(content).toHaveValue('## 最新正文\n\n**中文内容**');
+  });
+}
+
+test('Markdown cancellation and failures retain the selected note and draft', async ({ page }) => {
+  await fixture(page);
+  const input = await editNote(page);
+  await input.fill('keep this content');
+  await page.evaluate(() => { window.testState.markdownResult = 'cancel'; });
+  await transferMarkdown(page, 'import');
+  await expect(page.locator('.note-list__item')).toHaveCount(2);
+  await expect(input).toHaveValue('keep this content');
+  await transferMarkdown(page, 'export');
+  await expect(page.locator('.error-banner')).toHaveCount(0);
+  await page.evaluate(() => { window.testState.markdownResult = 'fail'; });
+  await transferMarkdown(page, 'import');
+  await expect(page.locator('.error-banner')).toContainText('UTF-8');
+  await expect(input).toHaveValue('keep this content');
+  await expect(page.locator('.note-list__item')).toHaveCount(2);
+  await transferMarkdown(page, 'export');
+  await expect(page.locator('.error-banner')).toContainText('export failed');
+  await expect(input).toHaveValue('keep this content');
+});
+
+test('Markdown import is available with no notes', async ({ page }) => {
+  await fixture(page, 'empty-notes');
+  await page.getByRole('button', { name: '笔记', exact: true }).click();
+  await page.getByRole('button', { name: '导入/导出', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: '导出 Markdown', exact: true })).toBeDisabled();
+  await expect(page.getByRole('menuitem', { name: '导出 Word', exact: true })).toBeDisabled();
+  await expect(page.getByRole('menuitem', { name: '导出 PDF', exact: true })).toBeDisabled();
+  await page.getByRole('menuitem', { name: '导入 Markdown', exact: true }).click();
+  await expect(page.locator('.note-list__item')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: '导入/导出', exact: true })).toBeVisible();
+});
+
+test('close waits for the Markdown import', async ({ page }) => {
+  await fixture(page, 'markdown-delay');
+  await page.getByRole('button', { name: '笔记', exact: true }).click();
+  await transferMarkdown(page, 'import');
+  await expect.poll(() => page.evaluate(() => Boolean(window.testState.releaseMarkdownImport))).toBe(true);
+  await page.evaluate(() => window.testState.closeHandler?.());
+  expect(await page.evaluate(() => window.testState.closed)).toBe(0);
+  await page.evaluate(() => window.testState.releaseMarkdownImport?.());
+  await expect.poll(() => page.evaluate(() => window.testState.closed)).toBe(1);
+  expect(await page.evaluate(() => window.testState.notes.length)).toBe(3);
+});
+
+test('priority filters compose with views and tags and apply only to todos', async ({ page }, testInfo) => {
+  await fixture(page, 'priorities');
+  const trigger = page.getByRole('button', { name: '筛选', exact: true });
+  await trigger.click();
+  const menu = page.locator('.sidebar-filter-menu');
+  const priorities = menu.getByRole('group', { name: '优先级', exact: true });
+  const options = ['紧急且重要', '重要不紧急', '紧急不重要', '不紧急不重要'];
+  for (const [index, name] of options.entries()) {
+    const option = priorities.getByRole('menuitemradio', { name, exact: true });
+    await option.click();
+    await expect(option).toBeChecked();
+    await expect(page.locator('.todo-row')).toHaveCount(1);
+    await expect(page.locator('.todo-row')).toContainText(`优先级待办 ${index + 1}`);
+    await expect(trigger.locator('.sidebar-filter-button__count')).toHaveText('1');
+  }
+  await priorities.getByRole('menuitemradio', { name: options[1], exact: true }).click();
+  await menu.getByRole('menuitemradio', { name: '#工作', exact: true }).click();
+  await expect(trigger.locator('.sidebar-filter-button__count')).toHaveText('2');
+  const views = menu.getByRole('group', { name: '视图', exact: true });
+  await views.getByRole('menuitemradio', { name: '已完成', exact: true }).click();
+  await expect(page.locator('.todo-row')).toHaveCount(0);
+  await expect(trigger.locator('.sidebar-filter-button__count')).toHaveText('3');
+  await views.getByRole('menuitemradio', { name: '全部', exact: true }).click();
+  await priorities.getByRole('menuitemradio', { name: '全部优先级', exact: true }).click();
+  await expect(page.locator('.todo-row')).toHaveCount(3);
+  await menu.getByRole('menuitem', { name: '清除筛选', exact: true }).click();
+  await expect(page.locator('.todo-row')).toHaveCount(4);
+  await expect(trigger).toHaveAttribute('aria-pressed', 'false');
+  await priorities.getByRole('menuitemradio', { name: options[0], exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath('priority-filter.png') });
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '笔记', exact: true }).click();
+  await trigger.click();
+  await expect(menu.getByRole('group', { name: '优先级', exact: true })).toHaveCount(0);
+  await expect(trigger).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.note-list__item')).toHaveCount(2);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '待办', exact: true }).click();
+  await expect(page.locator('.todo-row')).toHaveCount(1);
+  await expect(trigger.locator('.sidebar-filter-button__count')).toHaveText('1');
+});
+
+test('editing subitems uses completion controls and removes each row directly', async ({ page }, testInfo) => {
+  await fixture(page, 'subitems');
+  await page.getByRole('button', { name: '编辑', exact: true }).click();
+  for (let index = 0; index < 2; index += 1) {
+    await page.locator('.subitem-toggle-button').nth(index).click();
+    await expect(page.locator('.subitem-toggle-button').nth(index)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.sidebar__topbar')).toBeInViewport();
+    expect(await page.locator('.shell').evaluate(node => node.scrollTop)).toBe(0);
+    expect((await page.locator('.sidebar').boundingBox())?.y).toBe(0);
+  }
+  await page.locator('.subitem-toggle-button').last().press('Space');
+  await expect(page.locator('.subitem-toggle-button').last()).toHaveAttribute('aria-pressed', 'false');
+  expect(await page.locator('.shell').evaluate(node => node.scrollTop)).toBe(0);
+  await expect(page.getByRole('button', { name: '删除选中', exact: true })).toHaveCount(0);
+  await expect(page.locator('.subitems-list input[type="checkbox"]')).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('subitem-actions.png') });
+  await page.locator('.subitem-row').first().getByRole('button', { name: '移除子项' }).click();
+  await expect(page.locator('.subitem-row')).toHaveCount(1);
+  await expect(page.locator('.subitem-row')).toContainText('子项二');
+  expect(await page.evaluate(() => window.testState.todos[0].subitems.map(s => s.id))).toEqual(['sub-1']);
+});
+
+test('completing subitems keeps the sidebar anchored', async ({ page }) => {
+  await fixture(page, 'subitems');
+  for (let index = 0; index < 2; index += 1) {
+    await page.locator('.subitem-complete-button').nth(index).click();
+    await expect(page.locator('.subitem-row.is-completed')).toHaveCount(index + 1);
+    await expect(page.locator('.sidebar__topbar')).toBeInViewport();
+    await expect(page.locator('.sidebar-trash-button')).toBeInViewport();
+    expect(await page.locator('.shell').evaluate(node => node.scrollTop)).toBe(0);
+    expect((await page.locator('.sidebar').boundingBox())?.y).toBe(0);
+  }
+});
+
+test('remove is available only while editing and retains the row on failure', async ({ page }) => {
+  await fixture(page, 'subitems');
+  await expect(page.locator('.subitem-remove-button')).toHaveCount(0);
+  await page.getByRole('button', { name: '编辑', exact: true }).click();
+  await expect(page.locator('.subitem-remove-button')).toHaveCount(2);
+  await page.evaluate(() => { window.testState.failSaves = true; });
+  await page.locator('.subitem-remove-button').first().click();
+  await expect(page.locator('.error-banner')).toBeVisible();
+  await expect(page.locator('.subitem-row')).toHaveCount(2);
+  await page.evaluate(() => { window.testState.failSaves = false; });
+  await page.locator('.subitem-remove-button').first().click();
+  await expect(page.locator('.subitem-row')).toHaveCount(1);
+  await expect(page.locator('.subitem-row')).toContainText('子项二');
+  expect(await page.evaluate(() => window.testState.todos[0].subitems[0].isCompleted)).toBe(false);
+  await page.getByRole('button', { name: '预览', exact: true }).click();
+  await expect(page.locator('.subitem-remove-button')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '预览', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.detail-toolbar .note-delete-button')).toHaveText('');
+  await expect(page.locator('.detail-toolbar .note-delete-button')).toHaveAccessibleName('删除');
+});
+
+test('minus discards a pending subitem without saving it', async ({ page }) => {
+  await fixture(page);
+  await page.getByRole('button', { name: '编辑', exact: true }).click();
+  for (const keyboard of [false, true]) {
+    await page.getByRole('button', { name: '添加子项', exact: true }).click();
+    await page.locator('.subitem-input').fill('discard this child');
+    if (keyboard) {
+      await page.locator('.subitem-input').press('Tab');
+      await expect(page.locator('.subitem-remove-button')).toBeFocused();
+      await page.locator('.subitem-remove-button').press('Enter');
+    } else {
+      await page.locator('.subitem-remove-button').click();
+    }
+    await expect(page.locator('.subitem-row')).toHaveCount(0);
+    expect(await page.evaluate(() => window.testState.todos[0].subitems)).toEqual([]);
+  }
+});
+
+test('subitem focus and window resizing keep the workspace anchored', async ({ page }) => {
+  await page.setViewportSize({ width: 1042, height: 678 });
+  await fixture(page);
+  await page.getByRole('button', { name: '编辑', exact: true }).click();
+  await page.getByRole('button', { name: '添加子项', exact: true }).click();
+  await expect(page.locator('.subitem-input')).toBeFocused();
+  await expect(page.locator('.subitem-input')).toHaveCSS('outline-style', 'none');
+  const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
+  const focusColor = await page.evaluate((color) => {
+    const probe = document.createElement('span');
+    probe.style.color = color;
+    document.body.append(probe);
+    const result = getComputedStyle(probe).color;
+    probe.remove();
+    return result;
+  }, accent);
+  await expect(page.locator('.subitem-row.is-pending')).toHaveCSS('border-top-color', focusColor);
+  for (const size of [{ width: 1042, height: 678 }, { width: 1080, height: 720 }, { width: 1360, height: 860 }]) {
+    await page.setViewportSize(size);
+    const sidebar = await page.locator('.sidebar').boundingBox();
+    expect(sidebar?.y).toBe(0);
+    expect(sidebar!.y + sidebar!.height).toBe(size.height);
+    const panel = await page.locator('.detail-panel').boundingBox();
+    expect(panel?.y).toBe(0);
+    expect(panel!.y + panel!.height).toBe(size.height);
+  }
+  await expect(page.locator('.sidebar__topbar')).toBeInViewport();
+  await expect(page.locator('.sidebar-trash-button')).toBeInViewport();
+});
 
 test('rapid todo selection flushes the latest draft', async ({ page }) => {
   await fixture(page);
@@ -335,4 +648,25 @@ test('dialogs have accessible names and return keyboard focus to their opener', 
   await expect(page.getByRole('dialog', { name: '关联待办', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(relation).toBeFocused();
+});
+
+test('language cards support whole-row selection and keyboard navigation', async ({ page }, testInfo) => {
+  await fixture(page);
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  await page.getByRole('button', { name: '语言', exact: true }).click();
+  const chinese = page.getByRole('radio', { name: '简体中文', exact: true });
+  const english = page.getByRole('radio', { name: 'English', exact: true });
+  await expect(chinese).toBeChecked();
+  await expect(english).not.toBeChecked();
+  await english.getByText('English', { exact: true }).click();
+  await expect(english).toBeChecked();
+  await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.testState.config.language)).toBe('en-US');
+  await expect(english).toBeEnabled();
+  await english.focus();
+  await page.keyboard.down('ArrowUp');
+  await expect(chinese).toBeChecked();
+  await page.keyboard.up('ArrowUp');
+  await expect(chinese).toBeEnabled();
+  await page.screenshot({ path: testInfo.outputPath('language-cards.png') });
 });

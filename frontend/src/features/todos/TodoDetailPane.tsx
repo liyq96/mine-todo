@@ -1,9 +1,13 @@
 import {
   IconArchive,
+  IconEdit,
+  IconEye,
   IconListCheck,
+  IconMinus,
   IconPlus,
   IconStar,
   IconStarFilled,
+  IconTrash,
 } from '@tabler/icons-react';
 import { useMemo, useState } from 'react';
 import type { PendingSubitem, SaveStatus } from '../../appTypes';
@@ -16,7 +20,7 @@ import { SaveIndicator } from '../_primitives/SaveIndicator';
 type DetailCopy = TodoPropertiesCopy & {
   blankTitle: string;
   blankDescription: string;
-  exitEdit: string;
+  preview: string;
   edit: string;
   delete: string;
   titlePlaceholder: string;
@@ -27,7 +31,7 @@ type DetailCopy = TodoPropertiesCopy & {
   clearDate: string;
   contentPlaceholder: string;
   subitemsTitle: string;
-  deleteSelectedSubitems: string;
+  removeSubitem: string;
   addSubitem: string;
   subitemPlaceholder: string;
   emptySubitems: string;
@@ -61,7 +65,6 @@ type TodoDetailPaneProps = {
   detailHTML: string;
   visibleSubitems: TodoSubitem[];
   pendingSubitems: PendingSubitem[];
-  selectedSubitemIds: string[];
   editingSubitemId: string | null;
   editingSubitemContent: string;
   onExitEditMode: () => void;
@@ -69,9 +72,8 @@ type TodoDetailPaneProps = {
   onRequestDelete: () => void;
   onRetrySave: () => void;
   onDraftChange: (updater: (current: TodoDraft) => TodoDraft) => void;
-  onDeleteSelectedSubitems: () => void;
+  onDeleteSubitem: (id: string) => void;
   onAddSubitemInput: () => void;
-  onToggleSubitemSelection: (id: string) => void;
   onStartEditingSubitem: (subitem: TodoSubitem) => void;
   onEditingSubitemContentChange: (value: string) => void;
   onCommitEditingSubitem: () => void;
@@ -100,7 +102,6 @@ export function TodoDetailPane({
   detailHTML,
   visibleSubitems,
   pendingSubitems,
-  selectedSubitemIds,
   editingSubitemId,
   editingSubitemContent,
   onExitEditMode,
@@ -108,9 +109,8 @@ export function TodoDetailPane({
   onRequestDelete,
   onRetrySave,
   onDraftChange,
-  onDeleteSelectedSubitems,
+  onDeleteSubitem,
   onAddSubitemInput,
-  onToggleSubitemSelection,
   onStartEditingSubitem,
   onEditingSubitemContentChange,
   onCommitEditingSubitem,
@@ -137,6 +137,22 @@ export function TodoDetailPane({
       description: note.contentMarkdown.replace(/\s+/g, ' ').trim().slice(0, 120) || undefined,
       keywords: [note.contentMarkdown, ...note.tags].join('\n'),
     })), [copy.untitledRelatedItem, draft.noteIds, notes]);
+
+  function renderRemoveButton(id: string, isPending = false) {
+    return (
+      <button
+        type="button"
+        className="subitem-remove-button"
+        aria-label={copy.removeSubitem}
+        title={copy.removeSubitem}
+        disabled={saving}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => isPending ? onRemovePendingSubitem(id) : onDeleteSubitem(id)}
+      >
+        <IconMinus size={16} stroke={2.4} aria-hidden="true" />
+      </button>
+    );
+  }
 
   return (
     <main className="detail-panel">
@@ -176,17 +192,35 @@ export function TodoDetailPane({
               >
                 <IconArchive size={15} stroke={2} aria-hidden="true" />
               </button>
-              {isEditing ? (
-                <button type="button" className="topbar-link" onClick={onExitEditMode}>
-                  {copy.exitEdit}
-                </button>
-              ) : (
-                <button type="button" className="topbar-link" onClick={onEnterEditMode}>
+              <div className="note-view-switch" aria-label={`${copy.edit} / ${copy.preview}`}>
+                <button
+                  type="button"
+                  className={`note-view-switch__button ${isEditing ? 'is-active' : ''}`}
+                  onClick={onEnterEditMode}
+                  aria-pressed={isEditing}
+                >
+                  <IconEdit size={14} stroke={2} aria-hidden="true" />
                   {copy.edit}
                 </button>
-              )}
-              <button type="button" className="topbar-link" onClick={onRequestDelete} disabled={isDeleting}>
-                {copy.delete}
+                <button
+                  type="button"
+                  className={`note-view-switch__button ${!isEditing ? 'is-active' : ''}`}
+                  onClick={() => { if (isEditing) onExitEditMode(); }}
+                  aria-pressed={!isEditing}
+                >
+                  <IconEye size={14} stroke={2} aria-hidden="true" />
+                  {copy.preview}
+                </button>
+              </div>
+              <button
+                type="button"
+                className="note-delete-button"
+                onClick={onRequestDelete}
+                disabled={isDeleting || saving}
+                title={copy.delete}
+                aria-label={copy.delete}
+              >
+                <IconTrash size={16} stroke={2} aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -245,14 +279,6 @@ export function TodoDetailPane({
                   <div className="subitems-toolbar">
                     <button
                       type="button"
-                      className="topbar-link"
-                      onClick={onDeleteSelectedSubitems}
-                      disabled={saving || selectedSubitemIds.length === 0}
-                    >
-                      {copy.deleteSelectedSubitems}
-                    </button>
-                    <button
-                      type="button"
                       className="subitem-add-button"
                       onClick={onAddSubitemInput}
                       disabled={saving}
@@ -270,28 +296,32 @@ export function TodoDetailPane({
                   ) : null}
 
                   {visibleSubitems.map((subitem) => {
-                    const isSelected = selectedSubitemIds.includes(subitem.id);
                     const isEditingSubitem = editingSubitemId === subitem.id;
 
                     return (
                       <div
                         key={subitem.id}
-                        className={`subitem-row is-editing ${isSelected ? 'is-selected' : ''} ${subitem.isCompleted ? 'is-completed' : ''}`}
+                        className={`subitem-row is-editing ${subitem.isCompleted ? 'is-completed' : ''}`}
                       >
-                        <label className="subitem-select">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => onToggleSubitemSelection(subitem.id)}
-                          />
-                          <span className="subitem-checkbox">{isSelected ? '✓' : ''}</span>
-                        </label>
+                        <button
+                          type="button"
+                          className="subitem-toggle-button"
+                          aria-label={subitem.content}
+                          aria-pressed={subitem.isCompleted}
+                          disabled={saving}
+                          onClick={() => onToggleSubitemCompleted(subitem)}
+                        >
+                          <span className={`subitem-checkbox ${subitem.isCompleted ? 'is-checked' : ''}`} aria-hidden="true">{subitem.isCompleted ? '✓' : ''}</span>
+                        </button>
                         {isEditingSubitem ? (
                           <input
                             className="subitem-input"
                             value={editingSubitemContent}
                             onChange={(event) => onEditingSubitemContentChange(event.target.value)}
-                            onBlur={() => void onCommitEditingSubitem()}
+                            onBlur={(event) => {
+                              if (event.relatedTarget instanceof HTMLButtonElement && event.relatedTarget.classList.contains('subitem-remove-button') && event.currentTarget.parentElement?.contains(event.relatedTarget)) return;
+                              onCommitEditingSubitem();
+                            }}
                             onKeyDown={(event) => {
                               if (event.nativeEvent.isComposing || event.keyCode === 229) return;
                               if (event.key === 'Enter') {
@@ -313,6 +343,7 @@ export function TodoDetailPane({
                             <span className="subitem-content">{subitem.content}</span>
                           </button>
                         )}
+                        {renderRemoveButton(subitem.id)}
                       </div>
                     );
                   })}
@@ -324,7 +355,10 @@ export function TodoDetailPane({
                         className="subitem-input"
                         value={item.content}
                         onChange={(event) => onPendingSubitemChange(item.id, event.target.value)}
-                        onBlur={() => void onCommitPendingSubitem(item.id)}
+                        onBlur={(event) => {
+                          if (event.relatedTarget instanceof HTMLButtonElement && event.relatedTarget.classList.contains('subitem-remove-button') && event.currentTarget.parentElement?.contains(event.relatedTarget)) return;
+                          onCommitPendingSubitem(item.id);
+                        }}
                         onKeyDown={(event) => {
                           if (event.nativeEvent.isComposing || event.keyCode === 229) return;
                           if (event.key === 'Enter') {
@@ -338,6 +372,7 @@ export function TodoDetailPane({
                         placeholder={copy.subitemPlaceholder}
                         autoFocus={index === pendingSubitems.length - 1}
                       />
+                      {renderRemoveButton(item.id, true)}
                     </div>
                   ))}
                 </div>
@@ -379,18 +414,23 @@ export function TodoDetailPane({
                   {visibleSubitems.length === 0 ? <p className="subitems-empty">{copy.emptySubitems}</p> : null}
 
                   {visibleSubitems.map((subitem) => (
-                    <button
+                    <div
                       key={subitem.id}
-                      type="button"
                       className={`subitem-row is-view ${subitem.isCompleted ? 'is-completed' : ''}`}
-                      onClick={() => onToggleSubitemCompleted(subitem)}
-                      disabled={saving}
                     >
-                      <span className={`subitem-checkbox ${subitem.isCompleted ? 'is-checked' : ''}`}>
-                        {subitem.isCompleted ? '✓' : ''}
-                      </span>
-                      <span className="subitem-content">{subitem.content}</span>
-                    </button>
+                      <button
+                        type="button"
+                        className="subitem-complete-button"
+                        onClick={() => onToggleSubitemCompleted(subitem)}
+                        aria-pressed={subitem.isCompleted}
+                        disabled={saving}
+                      >
+                        <span className={`subitem-checkbox ${subitem.isCompleted ? 'is-checked' : ''}`}>
+                          {subitem.isCompleted ? '✓' : ''}
+                        </span>
+                        <span className="subitem-content">{subitem.content}</span>
+                      </button>
+                    </div>
                   ))}
                 </div>
               </section>

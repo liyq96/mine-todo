@@ -24,7 +24,7 @@ import {
 } from '@tabler/icons-react';
 import { AnchoredPopover } from '../_primitives/AnchoredPopover';
 import type { NoteFilter, TodoSmartView, WorkspaceMode } from '../../appTypes';
-import { TODO_PRIORITY_RANK } from '../../lib/priorities';
+import { TODO_PRIORITIES, TODO_PRIORITY_RANK } from '../../lib/priorities';
 import { matchesTodoView } from '../../lib/productivity';
 import type { Note, Todo, TodoGroup, TodoPriority } from '../../types';
 
@@ -58,6 +58,7 @@ type SidebarCopy = {
   clearFilters: string;
   tagsTitle: string;
   allTags: string;
+  allPriorities: string;
   smartViews: Record<TodoSmartView, string>;
   activeNotes: string;
   favoriteNotes: string;
@@ -156,6 +157,7 @@ export function TodoSidebar({
   const [menuGroupId, setMenuGroupId] = useState<string | null>(null);
   const [selectedTag, setSelectedTag] = useState('');
   const [smartView, setSmartView] = useState<TodoSmartView>('all');
+  const [priorityFilter, setPriorityFilter] = useState<TodoPriority | 'all'>('all');
   const [noteFilter, setNoteFilter] = useState<NoteFilter>('active');
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
 
@@ -167,13 +169,15 @@ export function TodoSidebar({
 
   const visibleTodos = useMemo(
     () => todos
-      .filter((todo) => matchesTodoView(todo, smartView) && (!selectedTag || todo.tags.includes(selectedTag)))
+      .filter((todo) => matchesTodoView(todo, smartView)
+        && (priorityFilter === 'all' || todo.priority === priorityFilter)
+        && (!selectedTag || todo.tags.includes(selectedTag)))
       .sort((left, right) => {
         return Number(right.isFavorite) - Number(left.isFavorite)
           || TODO_PRIORITY_RANK[left.priority] - TODO_PRIORITY_RANK[right.priority]
           || new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
       }),
-    [selectedTag, smartView, todos],
+    [priorityFilter, selectedTag, smartView, todos],
   );
 
   const visibleNotes = useMemo(
@@ -189,7 +193,7 @@ export function TodoSidebar({
   );
 
   const activeFilterCount = Number(Boolean(selectedTag))
-    + (mode === 'todos' ? Number(smartView !== 'all') : Number(noteFilter !== 'active'));
+    + (mode === 'todos' ? Number(smartView !== 'all') + Number(priorityFilter !== 'all') : Number(noteFilter !== 'active'));
 
   const groupedTodos = useMemo(() => {
     const entries = new Map<string, Todo[]>();
@@ -319,6 +323,30 @@ export function TodoSidebar({
           </div>
         </section>
 
+        {mode === 'todos' ? (
+          <section className="sidebar-filter-menu__section">
+            <p>{copy.priorityLabel}</p>
+            <div className="sidebar-filter-menu__options" role="group" aria-label={copy.priorityLabel}>
+              {(['all', ...TODO_PRIORITIES] as const).map((priority) => (
+                <button
+                  key={priority}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={priorityFilter === priority}
+                  className={`sidebar-filter-option ${priorityFilter === priority ? 'is-active' : ''}`}
+                  onClick={() => setPriorityFilter(priority)}
+                >
+                  <span className={`sidebar-filter-option__icon ${priority !== 'all' ? `sidebar-filter-option__icon--priority is-priority-${priority}` : ''}`} aria-hidden="true">
+                    <IconFlag3 size={15} stroke={2} />
+                  </span>
+                  <span>{priority === 'all' ? copy.allPriorities : copy.priorities[priority]}</span>
+                  {priorityFilter === priority ? <IconCheck className="sidebar-filter-option__check" size={14} stroke={2.4} aria-hidden="true" /> : null}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         {allTags.length ? (
           <section className="sidebar-filter-menu__section">
             <p>{copy.tagsTitle}</p>
@@ -346,7 +374,10 @@ export function TodoSidebar({
             className="sidebar-filter-menu__clear"
             onClick={() => {
               setSelectedTag('');
-              if (mode === 'todos') setSmartView('all');
+              if (mode === 'todos') {
+                setSmartView('all');
+                setPriorityFilter('all');
+              }
               else setNoteFilter('active');
             }}
           >

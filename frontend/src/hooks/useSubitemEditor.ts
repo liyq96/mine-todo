@@ -1,4 +1,3 @@
-import type { Dispatch, SetStateAction } from 'react';
 import { useMemo, useRef, useState } from 'react';
 import { backend } from '../lib/wails';
 import { createPendingSubitem, readError } from '../lib/todos';
@@ -10,7 +9,6 @@ type UseSubitemEditorArgs = {
   draft: TodoDraft;
   selectedTodo: Todo | null;
   isEditing: boolean;
-  setDraft: Dispatch<SetStateAction<TodoDraft>>;
   setSaving: (value: boolean) => void;
   setError: (value: string) => void;
   unknownErrorText: string;
@@ -22,18 +20,17 @@ export function useSubitemEditor({
   draft,
   selectedTodo,
   isEditing,
-  setDraft,
   setSaving,
   setError,
   unknownErrorText,
   syncUpdatedTodo,
 }: UseSubitemEditorArgs) {
-  const [selectedSubitemIds, setSelectedSubitemIds] = useState<string[]>([]);
   const [pendingSubitems, setPendingSubitems] = useState<PendingSubitem[]>([]);
   const [editingSubitemId, setEditingSubitemId] = useState<string | null>(null);
   const [editingSubitemContent, setEditingSubitemContent] = useState('');
   const committingSubitemsRef = useRef(new Map<string, Promise<boolean>>());
   const editingWriteRef = useRef<Promise<boolean> | null>(null);
+  const deletingSubitemsRef = useRef(new Set<string>());
   const latest = useRef({ selectedId, pendingSubitems, editingSubitemId, editingSubitemContent, draft });
   latest.current = { selectedId, pendingSubitems, editingSubitemId, editingSubitemContent, draft };
 
@@ -43,7 +40,6 @@ export function useSubitemEditor({
   );
 
   function clearSubitemEditingState() {
-    setSelectedSubitemIds([]);
     setPendingSubitems([]);
     setEditingSubitemId(null);
     setEditingSubitemContent('');
@@ -144,29 +140,25 @@ export function useSubitemEditor({
     return true;
   }
 
-  function toggleSubitemSelection(id: string) {
-    setSelectedSubitemIds((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
-    );
-  }
-
-  async function handleDeleteSelectedSubitems() {
-    if (!selectedId || selectedSubitemIds.length === 0) {
-      return;
-    }
-
+  async function handleDeleteSubitem(id: string) {
+    if (!selectedId || deletingSubitemsRef.current.has(id)) return;
+    const todoId = selectedId;
+    deletingSubitemsRef.current.add(id);
+    setSaving(true);
     try {
-      setSaving(true);
+      // A keyboard focus change may already have started saving this row.
+      if (editingWriteRef.current) await editingWriteRef.current;
       const updated = await backend.deleteSubitems({
-        todoId: selectedId,
-        ids: selectedSubitemIds,
+        todoId,
+        ids: [id],
       });
-      setSelectedSubitemIds([]);
+      if (latest.current.selectedId === todoId && latest.current.editingSubitemId === id) cancelEditingSubitem();
       syncUpdatedTodo(updated, true);
       setError('');
     } catch (err) {
       setError(readError(err, unknownErrorText));
     } finally {
+      deletingSubitemsRef.current.delete(id);
       setSaving(false);
     }
   }
@@ -194,7 +186,6 @@ export function useSubitemEditor({
   return {
     flushSubitems,
     visibleSubitems,
-    selectedSubitemIds,
     pendingSubitems,
     editingSubitemId,
     editingSubitemContent,
@@ -207,8 +198,7 @@ export function useSubitemEditor({
     cancelEditingSubitem,
     commitPendingSubitem,
     commitEditingSubitem,
-    toggleSubitemSelection,
-    handleDeleteSelectedSubitems,
+    handleDeleteSubitem,
     handleToggleSubitemCompleted,
   };
 }

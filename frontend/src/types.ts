@@ -37,6 +37,19 @@ export interface NoteLink {
   noteId: string;
 }
 
+export interface ImportNoteMarkdownInput {
+  databasePath: string;
+}
+
+export interface ExportNoteMarkdownInput {
+  databasePath: string;
+  id: string;
+}
+
+export interface ExportNoteDocumentInput extends ExportNoteMarkdownInput {
+  format: 'docx' | 'pdf';
+}
+
 export interface Todo {
   id: string;
   groupId: string;

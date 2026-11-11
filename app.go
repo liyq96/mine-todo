@@ -3,23 +3,29 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"mine-todo/internal/config"
+	"mine-todo/internal/notedoc"
 	"mine-todo/internal/store"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type App struct {
-	mu            sync.Mutex
-	ctx           context.Context
-	configManager *config.Manager
-	storeManager  *store.Manager
-	frontendReady bool
-	closeApproved bool
+	mu                 sync.Mutex
+	ctx                context.Context
+	configManager      *config.Manager
+	storeManager       *store.Manager
+	frontendReady      bool
+	closeApproved      bool
+	openMarkdownDialog func(context.Context, runtime.OpenDialogOptions) (string, error)
+	saveMarkdownDialog func(context.Context, runtime.SaveDialogOptions) (string, error)
 }
 
 func NewApp() (*App, error) {
@@ -144,6 +150,151 @@ func (a *App) CreateNote(input store.CreateNoteInput) (*store.Note, error) {
 		return nil, errors.New("note title is required")
 	}
 	return a.storeManager.CreateNote(input)
+}
+
+func (a *App) ImportNoteMarkdown(input store.ImportNoteMarkdownInput) (*store.Note, error) {
+	input.DatabasePath = strings.TrimSpace(input.DatabasePath)
+	a.mu.Lock()
+	if input.DatabasePath == "" || input.DatabasePath != a.configManager.Current().DBPath {
+		a.mu.Unlock()
+		return nil, errors.New("database changed")
+	}
+	ctx, open := a.ctx, a.openMarkdownDialog
+	a.mu.Unlock()
+	if ctx == nil {
+		return nil, errors.New("application context is unavailable")
+	}
+	if open == nil {
+		open = runtime.OpenFileDialog
+	}
+	path, err := open(ctx, runtime.OpenDialogOptions{Filters: []runtime.FileFilter{{DisplayName: "Markdown (*.md, *.markdown)", Pattern: "*.md;*.markdown"}}})
+	if err != nil {
+		return nil, fmt.Errorf("select markdown file: %w", err)
+	}
+	if path == "" {
+		return nil, nil
+	}
+	noteTitle, content, err := readMarkdownFile(path)
+	if err != nil {
+		return nil, err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if input.DatabasePath != a.configManager.Current().DBPath {
+		return nil, errors.New("database changed")
+	}
+	return a.storeManager.CreateNote(store.CreateNoteInput{Title: noteTitle, ContentMarkdown: content})
+}
+
+func (a *App) ExportNoteMarkdown(input store.ExportNoteMarkdownInput) (bool, error) {
+	input.ID = strings.TrimSpace(input.ID)
+	input.DatabasePath = strings.TrimSpace(input.DatabasePath)
+	if input.ID == "" {
+		return false, errors.New("note id is required")
+	}
+	a.mu.Lock()
+	if input.DatabasePath == "" || input.DatabasePath != a.configManager.Current().DBPath {
+		a.mu.Unlock()
+		return false, errors.New("database changed")
+	}
+	ctx, save := a.ctx, a.saveMarkdownDialog
+	notes, err := a.storeManager.ListNotes()
+	a.mu.Unlock()
+	if err != nil {
+		return false, err
+	}
+	var target *store.Note
+	for i := range notes {
+		if notes[i].ID == input.ID {
+			target = &notes[i]
+			break
+		}
+	}
+	if target == nil {
+		return false, errors.New("note not found")
+	}
+	if ctx == nil {
+		return false, errors.New("application context is unavailable")
+	}
+	if save == nil {
+		save = runtime.SaveFileDialog
+	}
+	path, err := save(ctx, runtime.SaveDialogOptions{DefaultFilename: markdownFilename(target.Title), CanCreateDirectories: true, Filters: []runtime.FileFilter{{DisplayName: "Markdown (*.md, *.markdown)", Pattern: "*.md;*.markdown"}}})
+	if err != nil {
+		return false, fmt.Errorf("select markdown destination: %w", err)
+	}
+	if path == "" {
+		return false, nil
+	}
+	if !isMarkdownPath(path) {
+		path += ".md"
+	}
+	if err := writeMarkdownFile(path, markdownExportContent(target.Title, target.ContentMarkdown)); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (a *App) ExportNoteDocument(input store.ExportNoteDocumentInput) (bool, error) {
+	input.ID = strings.TrimSpace(input.ID)
+	input.DatabasePath = strings.TrimSpace(input.DatabasePath)
+	input.Format = strings.ToLower(strings.TrimSpace(input.Format))
+	if input.ID == "" {
+		return false, errors.New("note id is required")
+	}
+	var generate func(io.Writer, string, string) error
+	var displayName string
+	switch input.Format {
+	case "docx":
+		generate, displayName = notedoc.Word, "Word (*.docx)"
+	case "pdf":
+		generate, displayName = notedoc.PDF, "PDF (*.pdf)"
+	default:
+		return false, errors.New("unsupported document format")
+	}
+	a.mu.Lock()
+	if input.DatabasePath == "" || input.DatabasePath != a.configManager.Current().DBPath {
+		a.mu.Unlock()
+		return false, errors.New("database changed")
+	}
+	ctx, save := a.ctx, a.saveMarkdownDialog
+	notes, err := a.storeManager.ListNotes()
+	a.mu.Unlock()
+	if err != nil {
+		return false, err
+	}
+	var target *store.Note
+	for i := range notes {
+		if notes[i].ID == input.ID {
+			target = &notes[i]
+			break
+		}
+	}
+	if target == nil {
+		return false, errors.New("note not found")
+	}
+	if ctx == nil {
+		return false, errors.New("application context is unavailable")
+	}
+	if save == nil {
+		save = runtime.SaveFileDialog
+	}
+	extension := "." + input.Format
+	filename := strings.TrimSuffix(markdownFilename(target.Title), ".md") + extension
+	path, err := save(ctx, runtime.SaveDialogOptions{DefaultFilename: filename, CanCreateDirectories: true, Filters: []runtime.FileFilter{{DisplayName: displayName, Pattern: "*" + extension}}})
+	if err != nil {
+		return false, fmt.Errorf("select document destination: %w", err)
+	}
+	if path == "" {
+		return false, nil
+	}
+	if !strings.EqualFold(filepath.Ext(path), extension) {
+		path += extension
+	}
+	if err := writeNoteDocument(path, func(w io.Writer) error { return generate(w, target.Title, target.ContentMarkdown) }); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (a *App) UpdateNote(input store.UpdateNoteInput) (*store.Note, error) {

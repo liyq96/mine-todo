@@ -113,12 +113,15 @@ function App() {
     createNote,
     deleteNote,
     flushCurrentNote,
+    importMarkdown,
+    exportDocument,
   } = useNoteWorkspace({
     databasePath: config?.dbPath ?? '',
     suspended: isTransitioning || isDeleteNoteConfirmOpen,
     notes,
     setNotes,
     untitledNote: copy.untitledNote as string,
+    markdownErrors: copy.markdownErrors,
     unknownErrorText: copy.unknownError as string,
     setSaving,
     setError,
@@ -226,7 +229,6 @@ function App() {
   const {
     flushSubitems,
     visibleSubitems,
-    selectedSubitemIds,
     pendingSubitems,
     editingSubitemId,
     editingSubitemContent,
@@ -239,15 +241,13 @@ function App() {
     cancelEditingSubitem,
     commitPendingSubitem,
     commitEditingSubitem,
-    toggleSubitemSelection,
-    handleDeleteSelectedSubitems,
+    handleDeleteSubitem,
     handleToggleSubitemCompleted,
   } = useSubitemEditor({
     selectedId,
     draft,
     selectedTodo,
     isEditing,
-    setDraft,
     setSaving,
     setError,
     unknownErrorText: copy.unknownError as string,
@@ -473,6 +473,7 @@ function App() {
             clearFilters: copy.productivity.clearFilters,
             tagsTitle: copy.productivity.tagsTitle,
             allTags: copy.productivity.allTags,
+            allPriorities: copy.productivity.allPriorities,
             smartViews: copy.productivity.smartViews,
             activeNotes: copy.productivity.activeNotes,
             favoriteNotes: copy.productivity.favoriteNotes,
@@ -519,7 +520,7 @@ function App() {
           copy={{
             blankTitle: copy.blankTitle,
             blankDescription: copy.blankDescription,
-            exitEdit: copy.exitEdit,
+            preview: copy.previewNote,
             edit: copy.edit,
             delete: copy.delete,
             titlePlaceholder: copy.titlePlaceholder,
@@ -530,7 +531,7 @@ function App() {
             clearDate: copy.clearDate,
             contentPlaceholder: copy.todoContentPlaceholder,
             subitemsTitle: copy.subitemsTitle,
-            deleteSelectedSubitems: copy.deleteSelectedSubitems,
+            removeSubitem: copy.removeSubitem,
             addSubitem: copy.addSubitem,
             subitemPlaceholder: copy.subitemPlaceholder,
             emptySubitems: copy.emptySubitems,
@@ -571,16 +572,14 @@ function App() {
           detailHTML={detailHTML}
           visibleSubitems={visibleSubitems}
           pendingSubitems={pendingSubitems}
-          selectedSubitemIds={selectedSubitemIds}
           editingSubitemId={editingSubitemId}
           editingSubitemContent={editingSubitemContent}
           onExitEditMode={exitEditMode}
           onEnterEditMode={() => setIsEditing(true)}
           onRequestDelete={requestDeleteTodo}
           onDraftChange={(updater) => setDraft(updater)}
-          onDeleteSelectedSubitems={() => void handleDeleteSelectedSubitems()}
+          onDeleteSubitem={(id) => void handleDeleteSubitem(id)}
           onAddSubitemInput={handleAddSubitemInput}
-          onToggleSubitemSelection={toggleSubitemSelection}
           onStartEditingSubitem={startEditingSubitem}
           onEditingSubitemContentChange={setEditingSubitemContent}
           onCommitEditingSubitem={() => void commitEditingSubitem()}
@@ -613,6 +612,7 @@ function App() {
               editMode: copy.editNote,
               previewMode: copy.previewNote,
               deleteNote: copy.deleteNote,
+              transfer: { ...copy.noteTransfer, importMarkdown: copy.importMarkdown, exportMarkdown: copy.exportMarkdown },
               characterCount: copy.noteCharacterCount,
               updatedAt: copy.noteUpdatedAt,
               tagsLabel: copy.productivity.tagsLabel,
@@ -633,6 +633,8 @@ function App() {
             retrySave: copy.retrySave,
             }}
             onDraftChange={setNoteDraft}
+            onExportDocument={(format) => void exportDocument(format)}
+            onImportMarkdown={() => void importMarkdown()}
             onPreviewChange={setIsNotePreview}
             onCreateNote={() => void flushAllEdits().then((saved) => { if (saved) void createNote(); })}
             onRequestDelete={() => setIsDeleteNoteConfirmOpen(true)}

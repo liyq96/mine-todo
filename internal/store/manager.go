@@ -141,6 +141,21 @@ type CreateNoteInput struct {
 	Tags            []string `json:"tags"`
 }
 
+type ImportNoteMarkdownInput struct {
+	DatabasePath string `json:"databasePath"`
+}
+
+type ExportNoteMarkdownInput struct {
+	DatabasePath string `json:"databasePath"`
+	ID           string `json:"id"`
+}
+
+type ExportNoteDocumentInput struct {
+	DatabasePath string `json:"databasePath"`
+	ID           string `json:"id"`
+	Format       string `json:"format"`
+}
+
 type UpdateNoteInput struct {
 	DatabasePath    string   `json:"databasePath"`
 	ID              string   `json:"id"`

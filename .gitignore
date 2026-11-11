@@ -30,6 +30,7 @@ tmp/
 *.db
 *.db-shm
 *.db-wal
+docs/other/
 
 # IDE and OS files
 .idea/

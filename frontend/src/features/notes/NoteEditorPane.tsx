@@ -7,6 +7,8 @@ import type { Note, NoteDraft, Todo } from '../../types';
 import { RelationPickerDialog } from '../relations/RelationPickerDialog';
 import { TagInput, TagList } from '../tags/TagControls';
 import { SaveIndicator } from '../_primitives/SaveIndicator';
+import { NoteTransferMenu } from './NoteTransferMenu';
+import type { NoteTransferCopy } from './NoteTransferMenu';
 
 type NoteEditorCopy = {
   blankTitle: string;
@@ -17,6 +19,7 @@ type NoteEditorCopy = {
   editMode: string;
   previewMode: string;
   deleteNote: string;
+  transfer: NoteTransferCopy;
   characterCount: (count: number) => string;
   updatedAt: (value: string) => string;
   tagsLabel: string;
@@ -53,6 +56,8 @@ type NoteEditorPaneProps = {
   onPreviewChange: (value: boolean) => void;
   onCreateNote: () => void;
   onRequestDelete: () => void;
+  onExportDocument: (format: 'markdown' | 'docx' | 'pdf') => void;
+  onImportMarkdown: () => void;
   onRetrySave: () => void;
   onSelectTodo: (todo: Todo) => void;
   onSelectNote: (note: Note) => void;
@@ -75,6 +80,8 @@ export function NoteEditorPane({
   onPreviewChange,
   onCreateNote,
   onRequestDelete,
+  onExportDocument,
+  onImportMarkdown,
   onRetrySave,
   onSelectTodo,
   onSelectNote,
@@ -116,6 +123,7 @@ export function NoteEditorPane({
             <IconPlus size={16} stroke={2.2} aria-hidden="true" />
             {copy.createNote}
           </button>
+          <NoteTransferMenu copy={copy.transfer} saving={saving} canExport={false} onImport={onImportMarkdown} onExport={onExportDocument} />
         </div>
       ) : (
         <>
@@ -150,6 +158,7 @@ export function NoteEditorPane({
                   {copy.previewMode}
                 </button>
               </div>
+              <NoteTransferMenu copy={copy.transfer} saving={saving} canExport onImport={onImportMarkdown} onExport={onExportDocument} />
               <button
                 type="button"
                 className="note-delete-button"

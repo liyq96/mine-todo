@@ -1,4 +1,4 @@
-import type { BootstrapResponse, Note, NoteDraft, NoteUpdateInput, Todo, TodoDraft, TodoGroup, TodoUpdateInput } from '../types';
+import type { BootstrapResponse, ExportNoteDocumentInput, ExportNoteMarkdownInput, ImportNoteMarkdownInput, Note, NoteDraft, NoteUpdateInput, Todo, TodoDraft, TodoGroup, TodoUpdateInput } from '../types';
 
 declare global {
   interface Window {
@@ -15,6 +15,9 @@ declare global {
           ListTodos: () => Promise<Todo[]>;
           ListNotes: () => Promise<Note[]>;
           CreateNote: (payload: NoteDraft) => Promise<Note>;
+          ImportNoteMarkdown: (payload: ImportNoteMarkdownInput) => Promise<Note | null>;
+          ExportNoteMarkdown: (payload: ExportNoteMarkdownInput) => Promise<boolean>;
+          ExportNoteDocument: (payload: ExportNoteDocumentInput) => Promise<boolean>;
           UpdateNote: (payload: NoteUpdateInput) => Promise<Note>;
           DeleteNote: (id: string) => Promise<void>;
           RestoreNote: (id: string) => Promise<BootstrapResponse>;
@@ -62,6 +65,9 @@ export const backend = {
   getBootstrap: () => appBinding().GetBootstrap(),
   listNotes: () => appBinding().ListNotes(),
   createNote: (payload: NoteDraft) => appBinding().CreateNote(payload),
+  importNoteMarkdown: (payload: ImportNoteMarkdownInput) => appBinding().ImportNoteMarkdown(payload),
+  exportNoteMarkdown: (payload: ExportNoteMarkdownInput) => appBinding().ExportNoteMarkdown(payload),
+  exportNoteDocument: (payload: ExportNoteDocumentInput) => appBinding().ExportNoteDocument(payload),
   updateNote: (payload: NoteUpdateInput) => appBinding().UpdateNote(payload),
   deleteNote: (id: string) => appBinding().DeleteNote(id),
   restoreNote: (id: string) => appBinding().RestoreNote(id),
